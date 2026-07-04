@@ -7,7 +7,7 @@ services:
       - "8554:8554"     # RTSP
       - "1935:1935"     # RTMP
       - "8888:8888"     # HLS (Para ver streaming en navegadores si fuera necesario)
-      - "8889:8890/udp" # SRT (Mapea el puerto host 8889 al puerto interno 8890 de MediaMTX)
+      - "8890:8890/udp" # SRT (Mapea el puerto host 8890 al puerto interno 8890 de MediaMTX)
 
   image-store:
     build: ./image-store

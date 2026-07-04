@@ -1,0 +1,31 @@
+# ==============================================================================
+# ARCHIVOS IGNORADOS EN EL PROYECTO STRATOCASTER
+# ==============================================================================
+
+# Volúmenes y persistencia de Docker (Evita subir bases de datos y configuraciones locales)
+docker/influxdb/
+docker/mosquitto/data/
+docker/mosquitto/log/
+docker/grafana/
+docker-broadcast/images/
+images/
+
+# Archivos con credenciales y contraseñas (Secretos)
+.env
+docker/.env
+codigo/Android/sonda.env
+
+# Archivos temporales y logs de ejecución
+*.tmp
+*.log
+codigo/Android/*.tmp
+codigo/Android/*.log
+capturas/
+/tmp/
+
+# Carpetas de editores y sistemas operativos
+.vscode/
+.idea/
+.obsidian/
+.DS_Store
+Thumbs.db

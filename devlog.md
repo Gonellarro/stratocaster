@@ -27,16 +27,16 @@ El flujo opera bajo las siguientes reglas:
 * **[sonda.env.example](file:///home/marti/Documentos/Personal/Sonda/codigo/Android/sonda.env.example):**
   * Creado un archivo plantilla para desacoplar las variables sensibles (contraseña de Mosquitto, dominio del servidor) y cargarlas mediante variables de entorno dinámicas en el shell sin comprometer la seguridad en Git.
 
-### 🐳 Infraestructura Servidor (`docker/`)
-* **Servidor de Imágenes (`docker/image-store/`):**
+### 🐳 Infraestructura Servidor (`docker-TIG/`)
+* **Servidor de Imágenes (`docker-broadcast/image-store/`):**
   * Creado un microservicio ligero en Python usando **Flask** (`app.py` y `Dockerfile`).
   * Genera un UUID único para cada foto subida para prevenir colisiones de nombres.
   * Almacena las fotos en un volumen físico persistente `./images` expuesto en el puerto `5000` (diseñado para rutarse de forma segura mediante HTTPS en Nginx Proxy Manager).
   * **Miniweb de Galería (`/fotos`):** Creada una interfaz web integrada en el puerto `5000/fotos`. Genera una vista de galería en modo oscuro fluido y moderno (fuente Google Outfit, bordes difuminados, sombras de neón). Incluye un visor a pantalla completa (*lightbox*) para ampliar las imágenes con su descripción al hacer clic sobre ellas.
   * **Asociación de metadatos:** Guarda un archivo `.json` de metadatos al lado de cada foto para registrar la descripción de la IA y la marca de tiempo de subida en tiempo real.
-* **[docker-compose.yml](file:///home/marti/Documentos/Personal/Sonda/docker/docker-compose.yml):**
+* **[docker-compose.yml](file:///home/marti/Documentos/Personal/Sonda/docker-TIG/docker-compose.yml):**
   * Integrado el nuevo servicio `image-store` en la pila de contenedores.
-* **[telegraf.conf](file:///home/marti/Documentos/Personal/Sonda/docker/telegraf/telegraf.conf):**
+* **[telegraf.conf](file:///home/marti/Documentos/Personal/Sonda/docker-TIG/telegraf/telegraf.conf):**
   * Añadida la entrada `INPUT 3` para suscribir a Telegraf al nuevo topic MQTT `sonda/camera`.
   * Configurados los campos de string `texto` y `url_imagen` para que InfluxDB los almacene de forma nativa sin errores de tipado.
 
@@ -61,12 +61,13 @@ Se actualizó el dashboard de Grafana con las siguientes mejoras:
 
 ## 3. Guía de Despliegue Técnico (Siguiente Sesión)
 Cuando decidas migrar los cambios al servidor principal, el checklist ordenado es:
-1. Transferir la carpeta `image-store/` al servidor.
-2. Añadir el bloque del servicio `image-store` a tu `docker-compose.yml` real.
-3. Copiar el archivo `telegraf.conf` actualizado al servidor y reiniciar Telegraf (`docker compose restart telegraf`).
-4. Levantar la pila actual (`docker compose up -d --build`).
+1. Transferir las carpetas `docker-TIG/` y `docker-broadcast/` al servidor (o hacer `git pull` en la carpeta raíz del proyecto).
+2. Copiar el archivo `telegraf.conf` actualizado al servidor (`docker-TIG/telegraf/telegraf.conf`) y reiniciar Telegraf (`docker compose restart telegraf`).
+3. Levantar la pila de telemetría: `cd docker-TIG && docker compose up -d --build`.
+4. Levantar la pila de retransmisión: `cd docker-broadcast && docker compose up -d --build`.
 5. En **Nginx Proxy Manager**, añadir el Proxy Host para redirigir tu subdominio `sondafotos.martivich.es` al contenedor `image-store` en el puerto `5000` con SSL forzado.
-   * **Tip para la Miniweb:** El endpoint de la galería estará disponible públicamente también bajo `https://sondafotos.martivich.es/fotos`.
+   * **Tip para la Miniweb:** El panel de control estará en `/control` y la galería en `/fotos` (ej: `https://sondafotos.martivich.es/control`).
 6. En el teléfono móvil, crear el archivo `sonda.env` a partir del de ejemplo y rellenar las contraseñas.
 7. Importar el archivo JSON final en Grafana.
+
 

@@ -67,12 +67,5 @@ services:
       - ./grafana/conf/grafana.ini:/etc/grafana/grafana.ini
       - ./grafana/logs:/var/log/grafana
 
-  image-store:
-    build: ./image-store
-    container_name: image-store
-    restart: unless-stopped
-    ports:
-      - '5000:5000'
-    volumes:
-      - ./images:/app/images
+
 

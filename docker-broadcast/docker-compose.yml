@@ -1,0 +1,19 @@
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: mediamtx
+    restart: unless-stopped
+    ports:
+      - "8554:8554"     # RTSP
+      - "1935:1935"     # RTMP
+      - "8888:8888"     # HLS (Para ver streaming en navegadores si fuera necesario)
+      - "8889:8889/udp" # SRT (Protocolo ultra-estable para el vídeo de la Sonda)
+
+  image-store:
+    build: ./image-store
+    container_name: image-store
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./images:/app/images

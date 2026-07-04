@@ -3,16 +3,16 @@
 # ==============================================================================
 
 # Volúmenes y persistencia de Docker (Evita subir bases de datos y configuraciones locales)
-docker/influxdb/
-docker/mosquitto/data/
-docker/mosquitto/log/
-docker/grafana/
+docker-TIG/influxdb/
+docker-TIG/mosquitto/data/
+docker-TIG/mosquitto/log/
+docker-TIG/grafana/
 docker-broadcast/images/
 images/
 
 # Archivos con credenciales y contraseñas (Secretos)
 .env
-docker/.env
+docker-TIG/.env
 codigo/Android/sonda.env
 
 # Archivos temporales y logs de ejecución

@@ -507,7 +507,10 @@
 
         // 1. Conectar a MQTT
         try {
-            client = mqtt.connect(mqttUrl);
+            client = mqtt.connect(mqttUrl, {
+                username: mqttUser,
+                password: mqttPass
+            });
 
             client.on('connect', () => {
                 console.log('HUD conectado a MQTT en:', mqttUrl);

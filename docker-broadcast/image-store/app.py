@@ -716,7 +716,10 @@ def control_panel():
             const mqttUrl = 'ws://' + serverIP + ':9001';
 
             console.log('Conectando a MQTT en:', mqttUrl);
-            client = mqtt.connect(mqttUrl);
+            client = mqtt.connect(mqttUrl, {
+                username: 'admin',
+                password: 'AWLCxdfGxwohHF2qpScJLK9AbRAFxD'
+            });
 
             client.on('connect', () => {
                 console.log('Conectado al Broker MQTT');

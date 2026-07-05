@@ -125,7 +125,9 @@ def list_photos():
                 try:
                     with open(meta_path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
-                        texto = data.get('texto', 'Sin descripción')
+                        texto = data.get('texto', 'Sin descripción').strip()
+                        # Sanitizar saltos de línea y comillas para evitar romper el JavaScript inline de la galería
+                        texto = texto.replace('\n', ' ').replace('\r', ' ').replace("'", "&#39;").replace('"', '&quot;')
                         timestamp = data.get('timestamp', 'Fecha desconocida')
                 except Exception:
                     texto = 'Error al leer descripción'

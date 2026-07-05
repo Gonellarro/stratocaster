@@ -170,7 +170,8 @@ handle_command() {
                     IMG_TO_PROCESS="$TARGET_IMG"
                 fi
                 
-                # Ejecutar inferencia de la IA
+                echo "Procesando imagen: $IMG_TO_PROCESS"
+                # Ejecutar inferencia de la IA (redirigiendo la entrada estándar para evitar cuelgues)
                 TEXTO_DETECTADO=$("$BIN_PATH" \
                     -m "$MODEL_PATH" \
                     --mmproj "$PROJ_PATH" \
@@ -179,7 +180,7 @@ handle_command() {
                     -b 256 \
                     -t 4 \
                     --no-warmup \
-                    -p "$PROMPT" 2> "$LOG_TMP")
+                    -p "$PROMPT" 2> "$LOG_TMP" </dev/null)
                 
                 # Obtener GPS rápido
                 LOC_JSON=$(timeout 5 termux-location -p gps -r last 2>/dev/null)
@@ -190,8 +191,9 @@ handle_command() {
                 LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')
                 ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
                 
-                # Subir foto a la web
-                UPLOAD_RESP=$(curl -s -F "file=@$IMG_TO_PROCESS" -F "texto=$TEXTO_DETECTADO" "$IMAGE_SERVER_URL/upload")
+                # Subir foto original en alta resolución a la web
+                echo "[📸 CÁMARA] Subiendo foto original a la web..."
+                UPLOAD_RESP=$(curl -s -F "file=@$TARGET_IMG" -F "texto=$TEXTO_DETECTADO" "$IMAGE_SERVER_URL/upload")
                 
                 if [ $? -eq 0 ] && [ -n "$UPLOAD_RESP" ] && [[ "$UPLOAD_RESP" != *"Error"* ]]; then
                     FILENAME="$UPLOAD_RESP"
@@ -208,6 +210,7 @@ handle_command() {
                     mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$MQTT_TOPIC" -m "$PAYLOAD"
                     termux-tts-speak "Comprobación de cámara y modelo de inteligencia artificial completada con éxito." 2>/dev/null
                 else
+                    echo "[❌ ERROR] Falló la subida de la foto original. Servidor respondió: $UPLOAD_RESP"
                     mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "camera_error"}'
                 fi
             else
@@ -256,7 +259,8 @@ rm -f "$ARMED_FLAG"
     mosquitto_sub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/comando" 2>/dev/null | while read -r line; do
         CMD=$(echo "$line" | jq -r '.cmd // empty')
         if [ -n "$CMD" ]; then
-            handle_command "$CMD"
+            # Redirigir entrada estándar para evitar que comandos hijos secuestren el pipe de mosquitto
+            handle_command "$CMD" </dev/null
         fi
     done
 ) &
@@ -435,9 +439,9 @@ while true; do
             fi
         fi
 
-        # Subir foto con su descripción correspondiente a la API
-        echo "[$(date +%T)] 📤 Subiendo foto y descripción a la web..."
-        UPLOAD_RESP=$(curl -s -F "file=@$IMG_TO_PROCESS" -F "texto=$TEXTO_DETECTADO" "$IMAGE_SERVER_URL/upload")
+        # Subir foto original en alta resolución a la web
+        echo "[$(date +%T)] 📤 Subiendo foto original y descripción a la web..."
+        UPLOAD_RESP=$(curl -s -F "file=@$TARGET_IMG" -F "texto=$TEXTO_DETECTADO" "$IMAGE_SERVER_URL/upload")
         
         if [ $? -eq 0 ] && [ -n "$UPLOAD_RESP" ] && [[ "$UPLOAD_RESP" != *"Error"* ]]; then
             FILENAME="$UPLOAD_RESP"

@@ -4,6 +4,7 @@ import json
 import datetime
 import time
 from flask import Flask, request, send_from_directory, render_template_string, jsonify
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 UPLOAD_FOLDER = '/app/images'

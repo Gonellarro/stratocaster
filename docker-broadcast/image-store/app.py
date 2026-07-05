@@ -687,10 +687,11 @@ def control_panel():
 
                     <div class="actions-grid" style="margin-top: 1.5rem;">
                         <button class="btn" onclick="sendCommand('get_status')">🔍 Consultar Sensores</button>
+                        <button class="btn" onclick="sendCommand('init_gps')">🛰️ Inicializar GPS</button>
                         <button class="btn" onclick="sendCommand('test_audio')">🔊 Probar Audio (TTS)</button>
                         <button class="btn" onclick="sendCommand('test_video_on')">📹 Test Vídeo [ON]</button>
                         <button class="btn" onclick="sendCommand('test_video_off')">🔌 Test Vídeo [OFF]</button>
-                        <button class="btn" onclick="sendCommand('test_photo')" style="grid-column: span 2;">📸 Test Foto/IA (Bajo Demanda)</button>
+                        <button class="btn" onclick="sendCommand('test_photo')">📸 Test Foto/IA (Bajo Demanda)</button>
                     </div>
                 </div>
             </div>
@@ -826,6 +827,23 @@ def control_panel():
                     gpsCheck.classList.add('checked');
                     gpsVal.textContent = 'Enlace Fijo (OK)';
                     checks.gps = true;
+                }
+
+                // Manejo de estados de inicialización de GPS
+                if (data.status === 'gps_initializing') {
+                    const gpsCheck = document.getElementById('check-gps');
+                    const gpsVal = document.getElementById('val-check-gps');
+                    gpsCheck.classList.remove('checked');
+                    gpsVal.textContent = 'Buscando satélites...';
+                    checks.gps = false;
+                    validateChecklist();
+                } else if (data.status === 'gps_failed') {
+                    const gpsCheck = document.getElementById('check-gps');
+                    const gpsVal = document.getElementById('val-check-gps');
+                    gpsCheck.classList.remove('checked');
+                    gpsVal.textContent = 'Error (Sin Enlace)';
+                    checks.gps = false;
+                    validateChecklist();
                 }
 
                 if (data.status === 'audio_ok') {

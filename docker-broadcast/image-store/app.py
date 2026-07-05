@@ -677,6 +677,12 @@ def control_panel():
                             <div class="checklist-label">Prueba de Vídeo en Vivo</div>
                             <div id="val-check-video" class="checklist-val">Pendiente</div>
                         </div>
+                        
+                        <div id="check-camera" class="checklist-item">
+                            <div class="checklist-checkbox">✓</div>
+                            <div class="checklist-label">Prueba de Cámara e IA (Upload)</div>
+                            <div id="val-check-camera" class="checklist-val">Pendiente</div>
+                        </div>
                     </div>
 
                     <div class="actions-grid" style="margin-top: 1.5rem;">
@@ -684,6 +690,7 @@ def control_panel():
                         <button class="btn" onclick="sendCommand('test_audio')">🔊 Probar Audio (TTS)</button>
                         <button class="btn" onclick="sendCommand('test_video_on')">📹 Test Vídeo [ON]</button>
                         <button class="btn" onclick="sendCommand('test_video_off')">🔌 Test Vídeo [OFF]</button>
+                        <button class="btn" onclick="sendCommand('test_photo')" style="grid-column: span 2;">📸 Test Foto/IA (Bajo Demanda)</button>
                     </div>
                 </div>
             </div>
@@ -708,7 +715,8 @@ def control_panel():
                 gps: false,
                 battery: false,
                 audio: false,
-                video: false
+                video: false,
+                camera: false
             };
 
             // Detectar automáticamente la IP del servidor de la URL para conectar a MQTT
@@ -740,6 +748,11 @@ def control_panel():
 
                 if (topic === 'sonda/status') {
                     handleSondaStatus(payload);
+                } else if (topic === 'sonda/camera') {
+                    document.getElementById('check-camera').classList.add('checked');
+                    document.getElementById('val-check-camera').textContent = 'Confirmado';
+                    checks.camera = true;
+                    validateChecklist();
                 }
             });
 
@@ -833,7 +846,7 @@ def control_panel():
                 const isSondaActive = Date.now() - lastMessageTime < 15000;
                 
                 // Habilitar botón de lanzamiento solo si todos los tests pasan y la sonda responde
-                if (checks.gps && checks.battery && checks.audio && checks.video && isSondaActive) {
+                if (checks.gps && checks.battery && checks.audio && checks.video && checks.camera && isSondaActive) {
                     armBtn.disabled = false;
                 } else {
                     armBtn.disabled = true;
@@ -894,6 +907,14 @@ def control_panel():
                 checks.audio = false;
                 document.getElementById('check-audio').classList.remove('checked');
                 document.getElementById('val-check-audio').textContent = 'Pendiente';
+                
+                checks.video = false;
+                document.getElementById('check-video').classList.remove('checked');
+                document.getElementById('val-check-video').textContent = 'Pendiente';
+                
+                checks.camera = false;
+                document.getElementById('check-camera').classList.remove('checked');
+                document.getElementById('val-check-camera').textContent = 'Pendiente';
                 
                 // 3. Resetear API
                 fetch('/control_lanzamiento', {

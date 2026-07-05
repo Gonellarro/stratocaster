@@ -124,6 +124,66 @@ handle_command() {
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "video_streaming_off"}'
             ;;
             
+        "test_photo")
+            # Captura de foto e inferencia IA bajo demanda (para pruebas pre-vuelo)
+            echo "[📸 CÁMARA] Solicitud de test de foto e IA local recibida..."
+            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "camera_testing"}'
+            
+            termux-camera-photo -c 0 "$TARGET_IMG"
+            
+            if [ -f "$TARGET_IMG" ]; then
+                # Redimensionar para optimizar
+                if magick "$TARGET_IMG" -resize 640x480 "$TARGET_IMG_LOW" 2>/dev/null; then
+                    IMG_TO_PROCESS="$TARGET_IMG_LOW"
+                else
+                    IMG_TO_PROCESS="$TARGET_IMG"
+                fi
+                
+                # Ejecutar inferencia de la IA
+                TEXTO_DETECTADO=$("$BIN_PATH" \
+                    -m "$MODEL_PATH" \
+                    --mmproj "$PROJ_PATH" \
+                    --image "$IMG_TO_PROCESS" \
+                    -c 2048 \
+                    -b 256 \
+                    -t 4 \
+                    --no-warmup \
+                    -p "$PROMPT" 2> "$LOG_TMP")
+                
+                # Obtener GPS rápido
+                LOC_JSON=$(timeout 5 termux-location -p gps -r last 2>/dev/null)
+                if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ]; then
+                    LOC_JSON=$(timeout 5 termux-location -p network -r last 2>/dev/null)
+                fi
+                LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
+                LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')
+                ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
+                
+                # Subir foto a la web
+                UPLOAD_RESP=$(curl -s -F "file=@$IMG_TO_PROCESS" -F "texto=$TEXTO_DETECTADO" "$IMAGE_SERVER_URL/upload")
+                
+                if [ $? -eq 0 ] && [ -n "$UPLOAD_RESP" ] && [[ "$UPLOAD_RESP" != *"Error"* ]]; then
+                    FILENAME="$UPLOAD_RESP"
+                    URL_COMPLETA="$IMAGE_SERVER_URL/images/$FILENAME"
+                    
+                    PAYLOAD=$(jq -n \
+                      --arg txt "$TEXTO_DETECTADO" \
+                      --arg url "$URL_COMPLETA" \
+                      --argjson lat "$LAT" \
+                      --argjson lng "$LNG" \
+                      --argjson alt "$ALT" \
+                      '{texto: $txt, url_imagen: $url, lat: $lat, lng: $lng, alt: $alt}')
+                    
+                    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$MQTT_TOPIC" -m "$PAYLOAD"
+                    termux-tts-speak "Comprobación de cámara y modelo de inteligencia artificial completada con éxito." 2>/dev/null
+                else
+                    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "camera_error"}'
+                fi
+            else
+                mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "camera_capture_failed"}'
+            fi
+            ;;
+            
         "reboot")
             echo "[⚠️ SISTEMA] Reiniciando dispositivo..."
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "rebooting"}'
@@ -171,9 +231,15 @@ rm -f "$ARMED_FLAG"
 ) &
 SUB_PID=$!
 
-# Bucle de espera del armado
+# Bucle de espera del armado (con telemetría periódica cada 10 segundos)
+COUNTER=0
 while [ ! -f "$ARMED_FLAG" ]; do
+    if [ $((COUNTER % 10)) -eq 0 ]; then
+        # Solicitar actualización de sensores de forma no bloqueante
+        handle_command "get_status" &>/dev/null &
+    fi
     sleep 1
+    COUNTER=$((COUNTER + 1))
 done
 
 # Matar el receptor de comandos de fondo para bloquear control remoto durante el vuelo

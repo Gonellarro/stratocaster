@@ -108,15 +108,18 @@ handle_command() {
             ;;
             
         "test_video_on")
-            # Encender streaming de Larix
+            # Encender streaming (Soporte VDO.ninja, Chrome o Larix)
             echo "[📹 VIDEO] Test de vídeo: Iniciando streaming..."
-            am start -n com.wmspanel.larix_broadcaster/.MainActivity &>/dev/null
+            # Intentar lanzar app nativa VDO.ninja
+            am start -n flutter.vdo.ninja/.MainActivity &>/dev/null
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "video_streaming_on"}'
             ;;
             
         "test_video_off")
-            # Apagar streaming de Larix
+            # Apagar todos los posibles codificadores de streaming para liberar la cámara
             echo "[📹 VIDEO] Test de vídeo: Deteniendo streaming..."
+            am force-stop flutter.vdo.ninja &>/dev/null
+            am force-stop com.android.chrome &>/dev/null
             am force-stop com.wmspanel.larix_broadcaster &>/dev/null
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "video_streaming_off"}'
             ;;
@@ -132,12 +135,8 @@ handle_command() {
             # ARMAR Y ENTRAR EN MODO VUELO
             echo "[🚀 SECUENCIA] ¡Comando de ARMADO recibido!"
             
-            # Detener Larix por si acaso estaba en test previo
-            am force-stop com.wmspanel.larix_broadcaster &>/dev/null
-            sleep 1
-            
-            # Iniciar Larix (inicia transmisión oficial)
-            am start -n com.wmspanel.larix_broadcaster/.MainActivity &>/dev/null
+            # NOTA: Usando VDO.ninja de forma manual, no reiniciamos la app al armar para no cortar la conexión iniciada a mano.
+            # Simplemente dejamos que la transmisión siga activa.
             
             # Avisar al servidor central para arrancar la cuenta atrás visual
             curl -s -X POST "$IMAGE_SERVER_URL/control_lanzamiento/ok" &>/dev/null
@@ -242,8 +241,10 @@ while true; do
     sleep 5
 done
 
-# Detener retransmisión de vídeo
+# Detener retransmisión de vídeo (Soporta VDO.ninja, Chrome y Larix)
 echo "[🔌 VIDEO] Deteniendo transmisión de vídeo en directo..."
+am force-stop flutter.vdo.ninja &>/dev/null
+am force-stop com.android.chrome &>/dev/null
 am force-stop com.wmspanel.larix_broadcaster &>/dev/null
 sleep 2
 

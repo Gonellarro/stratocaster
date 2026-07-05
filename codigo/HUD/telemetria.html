@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stratocaster HUD Overlay</title>
+    <!-- Importar fuentes modernas y de estilo cabina/aeroespacial -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <!-- Importar MQTT.js desde CDN -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        :root {
+            --cyan-accent: #00f0ff;
+            --cyan-glow: rgba(0, 240, 255, 0.4);
+            --red-accent: #ff0055;
+            --red-glow: rgba(255, 0, 85, 0.4);
+            --green-accent: #00ff66;
+            --green-glow: rgba(0, 255, 102, 0.4);
+            --panel-bg: rgba(10, 15, 30, 0.6);
+            --panel-border: rgba(0, 240, 255, 0.15);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: transparent; /* Fondo completamente transparente para OBS */
+            color: #ffffff;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Estilos del HUD General - Líneas y retículas */
+        .hud-border {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            bottom: 20px;
+            border: 1px solid rgba(0, 240, 255, 0.05);
+            pointer-events: none;
+        }
+
+        .hud-corner {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-color: var(--cyan-accent);
+            border-style: solid;
+            opacity: 0.7;
+        }
+        .top-left { top: 15px; left: 15px; border-width: 2px 0 0 2px; }
+        .top-right { top: 15px; right: 15px; border-width: 2px 2px 0 0; }
+        .bottom-left { bottom: 15px; left: 15px; border-width: 0 0 2px 2px; }
+        .bottom-right { bottom: 15px; right: 15px; border-width: 0 2px 2px 0; }
+
+        /* Panel Superior Central (Misión y Cuenta Atrás) */
+        .header-panel {
+            position: absolute;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-top: 3px solid var(--cyan-accent);
+            border-radius: 0 0 12px 12px;
+            padding: 10px 30px;
+            min-width: 320px;
+            text-align: center;
+            backdrop-filter: blur(8px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .header-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.8rem;
+            letter-spacing: 0.2em;
+            color: var(--cyan-accent);
+            margin-bottom: 2px;
+            text-shadow: 0 0 5px var(--cyan-glow);
+        }
+
+        .header-state {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.4rem;
+            font-weight: 900;
+            letter-spacing: 0.05em;
+        }
+        
+        .state-espera { color: #8899a6; }
+        .state-armando { color: #f59e0b; animation: pulse-opacity 1.5s infinite; }
+        .state-cuenta_atras { color: var(--red-accent); text-shadow: 0 0 10px var(--red-glow); animation: flash 1s infinite; }
+        .state-lanzado { color: var(--green-accent); text-shadow: 0 0 10px var(--green-glow); }
+
+        /* Panel Lateral (Telemetría de la Sonda) */
+        .telemetry-panel {
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-left: 3px solid var(--cyan-accent);
+            border-radius: 8px;
+            padding: 15px;
+            width: 280px;
+            backdrop-filter: blur(8px);
+            box-shadow: 5px 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .panel-header {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            color: var(--cyan-accent);
+            border-bottom: 1px solid rgba(0, 240, 255, 0.15);
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .telemetry-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .telemetry-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .telemetry-label {
+            font-size: 0.85rem;
+            color: #a0aec0;
+        }
+
+        .telemetry-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        /* Indicador Especial de Altitud y Vertical Speed */
+        .altitude-display {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+        
+        .v-speed {
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-top: 2px;
+        }
+        .vs-up { color: var(--green-accent); }
+        .vs-down { color: var(--red-accent); }
+        .vs-stable { color: #718096; }
+
+        /* Panel Central Gigante para Cuenta Atrás */
+        .center-countdown {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            pointer-events: none;
+            display: none;
+        }
+
+        .countdown-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.5rem;
+            letter-spacing: 0.3em;
+            color: var(--red-accent);
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px var(--red-glow);
+        }
+
+        .countdown-number {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 9rem;
+            font-weight: 900;
+            color: #ffffff;
+            line-height: 1;
+            text-shadow: 0 0 30px var(--red-glow), 0 0 60px rgba(255, 0, 85, 0.2);
+            animation: bounceScale 1s infinite;
+        }
+
+        /* Panel de Inferencia IA de la Sonda (Abajo) */
+        .ia-panel {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-bottom: 3px solid var(--cyan-accent);
+            border-radius: 8px;
+            padding: 15px 25px;
+            width: 700px;
+            max-width: 90%;
+            backdrop-filter: blur(8px);
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.4);
+            display: none; /* Se activa cuando la IA empieza a enviar descripciones */
+        }
+
+        .ia-header {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: var(--cyan-accent);
+            letter-spacing: 0.15em;
+            margin-bottom: 6px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .ia-caption {
+            font-size: 1.05rem;
+            line-height: 1.4;
+            color: #e2e8f0;
+            font-weight: 400;
+        }
+
+        /* Animaciones */
+        @keyframes pulse-opacity {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        @keyframes flash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.2; }
+        }
+
+        @keyframes bounceScale {
+            0% { transform: scale(0.9); }
+            100% { transform: scale(1.05); }
+        }
+
+        /* Estado del enlace de datos */
+        .link-indicator {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #718096;
+            display: inline-block;
+        }
+        .dot.connected {
+            background: var(--green-accent);
+            box-shadow: 0 0 8px var(--green-glow);
+            animation: pulse-opacity 1s infinite;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Bordes HUD -->
+    <div class="hud-border">
+        <div class="hud-corner top-left"></div>
+        <div class="hud-corner top-right"></div>
+        <div class="hud-corner bottom-left"></div>
+        <div class="hud-corner bottom-right"></div>
+    </div>
+
+    <!-- Panel Superior (Misión) -->
+    <div class="header-panel">
+        <div class="header-title">MISIÓN STRATOCASTER</div>
+        <div id="mission-state" class="header-state state-espera">EN ESPERA</div>
+    </div>
+
+    <!-- Panel Lateral Izquierdo (Telemetría de la Sonda) -->
+    <div class="telemetry-panel">
+        <div class="panel-header">Telemetría Sonda</div>
+        
+        <div class="telemetry-row">
+            <span class="telemetry-label">Enlace de Datos</span>
+            <span class="link-indicator">
+                <span id="link-dot" class="dot"></span>
+                <span id="link-text" style="font-size: 0.8rem; color: #a0aec0;">OFFLINE</span>
+            </span>
+        </div>
+
+        <div class="telemetry-row">
+            <span class="telemetry-label">Altitud GPS</span>
+            <div class="altitude-display">
+                <span id="telemetry-alt" class="telemetry-value">-- m</span>
+                <span id="telemetry-vspeed" class="v-speed vs-stable">0.0 m/s</span>
+            </div>
+        </div>
+
+        <div class="telemetry-row">
+            <span class="telemetry-label">Coordenadas</span>
+            <span id="telemetry-coords" class="telemetry-value" style="font-size: 0.85rem;">--</span>
+        </div>
+
+        <div class="telemetry-row">
+            <span class="telemetry-label">Precisión GPS</span>
+            <span id="telemetry-acc" class="telemetry-value">--</span>
+        </div>
+
+        <div class="telemetry-row">
+            <span class="telemetry-label">Batería Móvil</span>
+            <span id="telemetry-bat" class="telemetry-value">--</span>
+        </div>
+
+        <div class="telemetry-row">
+            <span class="telemetry-label">Temperatura</span>
+            <span id="telemetry-temp" class="telemetry-value">--</span>
+        </div>
+    </div>
+
+    <!-- Cuenta Atrás Gigante -->
+    <div id="countdown-overlay" class="center-countdown">
+        <div class="countdown-title">LANZAMIENTO EN</div>
+        <div id="countdown-val" class="countdown-number">10</div>
+    </div>
+
+    <!-- Panel de Inferencia IA (Fase Autónoma) -->
+    <div id="ia-overlay" class="ia-panel">
+        <div class="ia-header">
+            <span>🧠 INFERENCIA DE IA LOCAL (QWEN3-VL)</span>
+            <span id="ia-timestamp" style="font-size: 0.75rem; opacity: 0.7;">--</span>
+        </div>
+        <div id="ia-caption" class="ia-caption">Esperando descripción de la IA...</div>
+    </div>
+
+    <script>
+        // Parámetros de configuración extraídos de la URL del Browser Source en OBS
+        const urlParams = new URLSearchParams(window.location.search);
+        const serverIP = urlParams.get('server') || window.location.hostname || '192.168.1.196';
+        const mqttPort = urlParams.get('mqtt_port') || '9001';
+        const flaskPort = urlParams.get('flask_port') || '5000';
+
+        const mqttUrl = `ws://${serverIP}:${mqttPort}`;
+        const restUrl = `http://${serverIP}:${flaskPort}/control_lanzamiento`;
+
+        console.log(`Conectando HUD a MQTT: ${mqttUrl}`);
+        console.log(`Consultando API Flask: ${restUrl}`);
+
+        let client = null;
+        let lastMessageTime = 0;
+        
+        // Variables para cálculo de velocidad vertical
+        let lastAltitude = null;
+        let lastAltitudeTime = null;
+
+        // 1. Conectar al Broker MQTT
+        try {
+            client = mqtt.connect(mqttUrl);
+
+            client.on('connect', () => {
+                console.log('Conectado a MQTT con éxito');
+                client.subscribe('sonda/status');
+                client.subscribe('gps/data');
+                client.subscribe('sonda/camera');
+            });
+
+            client.on('message', (topic, message) => {
+                const payload = JSON.parse(message.toString());
+                lastMessageTime = Date.now();
+                updateConnectionState(true);
+
+                if (topic === 'sonda/status') {
+                    handleSondaStatus(payload);
+                } else if (topic === 'gps/data') {
+                    handleGpsData(payload);
+                } else if (topic === 'sonda/camera') {
+                    handleIaCamera(payload);
+                }
+            });
+        } catch (e) {
+            console.error('Error al iniciar MQTT:', e);
+        }
+
+        // 2. Control de estado "Sonda Conectada" por latencia (Hearbeat)
+        setInterval(() => {
+            if (Date.now() - lastMessageTime > 15000) {
+                updateConnectionState(false);
+            }
+        }, 5000);
+
+        function updateConnectionState(connected) {
+            const dot = document.getElementById('link-dot');
+            const text = document.getElementById('link-text');
+            if (connected) {
+                dot.classList.add('connected');
+                text.textContent = 'ONLINE';
+                text.style.color = 'var(--green-accent)';
+            } else {
+                dot.classList.remove('connected');
+                text.textContent = 'OFFLINE';
+                text.style.color = '#718096';
+            }
+        }
+
+        // 3. Procesar datos de telemetría de sonda/status
+        function handleSondaStatus(data) {
+            if (data.level !== undefined) {
+                document.getElementById('telemetry-bat').textContent = data.level + '%';
+                document.getElementById('telemetry-temp').textContent = data.temp + '°C';
+            }
+            if (data.lat !== undefined && data.lat !== null && data.lat !== "null") {
+                document.getElementById('telemetry-coords').textContent = `${parseFloat(data.lat).toFixed(5)}, ${parseFloat(data.lng).toFixed(5)}`;
+                document.getElementById('telemetry-alt').textContent = data.alt + ' m';
+                document.getElementById('telemetry-acc').textContent = data.accuracy + ' m';
+            }
+        }
+
+        // 4. Procesar datos de posicionamiento gps/data (Vuelo)
+        function handleGpsData(data) {
+            if (data.lat !== undefined && data.lat !== null && data.lat !== "null") {
+                document.getElementById('telemetry-coords').textContent = `${parseFloat(data.lat).toFixed(5)}, ${parseFloat(data.lng).toFixed(5)}`;
+                document.getElementById('telemetry-acc').textContent = parseFloat(data.accuracy).toFixed(1) + ' m';
+                
+                const currentAlt = parseFloat(data.altitude);
+                const currentTime = Date.now();
+                
+                // Calcular velocidad vertical (m/s)
+                if (lastAltitude !== null && lastAltitudeTime !== null) {
+                    const timeDiff = (currentTime - lastAltitudeTime) / 1000.0;
+                    if (timeDiff > 0.5) { // Evitar fluctuaciones muy rápidas
+                        const altDiff = currentAlt - lastAltitude;
+                        const vSpeed = altDiff / timeDiff;
+                        
+                        const vsEl = document.getElementById('telemetry-vspeed');
+                        vsEl.textContent = `${vSpeed >= 0 ? '+' : ''}${vSpeed.toFixed(1)} m/s`;
+                        
+                        if (vSpeed > 0.5) {
+                            vsEl.className = 'v-speed vs-up';
+                        } else if (vSpeed < -0.5) {
+                            vsEl.className = 'v-speed vs-down';
+                        } else {
+                            vsEl.className = 'v-speed vs-stable';
+                        }
+                        
+                        lastAltitude = currentAlt;
+                        lastAltitudeTime = currentTime;
+                    }
+                } else {
+                    lastAltitude = currentAlt;
+                    lastAltitudeTime = currentTime;
+                }
+                
+                document.getElementById('telemetry-alt').textContent = currentAlt.toFixed(0) + ' m';
+            }
+        }
+
+        // 5. Procesar descripciones de IA sonda/camera (Fase Autónoma)
+        function handleIaCamera(data) {
+            const iaPanel = document.getElementById('ia-overlay');
+            const iaText = document.getElementById('ia-caption');
+            const iaTime = document.getElementById('ia-timestamp');
+
+            if (data.texto) {
+                iaPanel.style.display = 'block'; // Mostrar panel
+                iaText.textContent = data.texto;
+                iaTime.textContent = new Date().toLocaleTimeString();
+            }
+        }
+
+        // 6. Consultar REST API de cuenta atrás de lanzamiento periódicamente
+        setInterval(() => {
+            fetch(restUrl)
+                .then(res => res.json())
+                .then(data => {
+                    const stateEl = document.getElementById('mission-state');
+                    const countdownEl = document.getElementById('countdown-overlay');
+                    const countdownVal = document.getElementById('countdown-val');
+                    
+                    // Actualizar banner de estado
+                    stateEl.textContent = data.estado.replace('_', ' ').toUpperCase();
+                    stateEl.className = `header-state state-${data.estado}`;
+
+                    // Manejo del overlay de la cuenta atrás
+                    if (data.estado === 'cuenta_atras') {
+                        countdownEl.style.display = 'block';
+                        countdownVal.textContent = data.tiempo_restante;
+                    } else if (data.estado === 'lanzado') {
+                        // Mostrar "DESPEGUE" o "IGNICIÓN" por unos segundos al completarse
+                        countdownEl.style.display = 'block';
+                        document.querySelector('.countdown-title').textContent = 'IGNICIÓN';
+                        countdownVal.textContent = 'GO';
+                        countdownVal.style.color = 'var(--green-accent)';
+                        countdownVal.style.textShadow = '0 0 30px var(--green-glow)';
+                        
+                        // Ocultar el centro tras 4 segundos del despegue
+                        setTimeout(() => {
+                            if (stateEl.textContent === 'LANZADO') {
+                                countdownEl.style.display = 'none';
+                            }
+                        }, 4000);
+                    } else {
+                        countdownEl.style.display = 'none';
+                        // Restaurar título de cuenta atrás
+                        document.querySelector('.countdown-title').textContent = 'LANZAMIENTO EN';
+                        countdownVal.style.color = '#ffffff';
+                        countdownVal.style.textShadow = '0 0 30px var(--red-glow)';
+                    }
+                })
+                .catch(err => console.error('Error polling launch control REST:', err));
+        }, 1000);
+    </script>
+</body>
+</html>

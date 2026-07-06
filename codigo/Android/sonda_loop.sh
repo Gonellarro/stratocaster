@@ -120,7 +120,7 @@ handle_command() {
         "init_gps")
             echo "[🛰️ GPS] Iniciando receptor GPS..."
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "gps_initializing"}'
-            termux-tts-speak "Iniciando búsqueda de satélites GPS." 2>/dev/null
+            timeout 5 termux-tts-speak "Iniciando búsqueda de satélites GPS." 2>/dev/null
             
             sleep 2
             LOC_JSON=$(get_gps_location)
@@ -138,16 +138,16 @@ handle_command() {
                   '{status: "gps_ok", lat: $lat, lng: $lng, alt: $alt, accuracy: $acc}')
                   
                 mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m "$STATUS_PAYLOAD"
-                termux-tts-speak "Señal de GPS fijada correctamente." 2>/dev/null
+                timeout 5 termux-tts-speak "Señal de GPS fijada correctamente." 2>/dev/null
             else
                 mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "gps_failed"}'
-                termux-tts-speak "Error al fijar señal de GPS." 2>/dev/null
+                timeout 5 termux-tts-speak "Error al fijar señal de GPS." 2>/dev/null
             fi
             ;;
             
         "test_audio")
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "audio_ok"}'
-            termux-tts-speak "Sonda en línea y lista para la comprobación." 2>/dev/null
+            timeout 5 termux-tts-speak "Sonda en línea y lista para la comprobación." 2>/dev/null
             ;;
             
         "test_video_on")
@@ -198,7 +198,7 @@ handle_command() {
                       '{texto: $txt, url_imagen: $url, lat: $lat, lng: $lng, alt: $alt}')
                     
                     mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$MQTT_TOPIC" -m "$PAYLOAD"
-                    termux-tts-speak "Comprobación de cámara completada con éxito." 2>/dev/null
+                    timeout 5 termux-tts-speak "Comprobación de cámara completada con éxito." 2>/dev/null
                 else
                     echo "[❌ ERROR] Falló la subida de la foto de test: $UPLOAD_RESP"
                     mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "camera_error"}'
@@ -210,7 +210,7 @@ handle_command() {
             
         "reboot")
             echo "[⚠️ SISTEMA] Reiniciando el dispositivo móvil..."
-            termux-tts-speak "Reiniciando el sistema de la sonda." 2>/dev/null
+            timeout 5 termux-tts-speak "Reiniciando el sistema de la sonda." 2>/dev/null
             sleep 1
             su -c reboot 2>/dev/null || reboot
             ;;
@@ -218,7 +218,7 @@ handle_command() {
         "arm")
             touch "$ARMED_FLAG"
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "armed"}'
-            termux-tts-speak "Sonda Armada. Despegue inminente." 2>/dev/null
+            timeout 5 termux-tts-speak "Sonda Armada. Despegue inminente." 2>/dev/null
             ;;
     esac
 }

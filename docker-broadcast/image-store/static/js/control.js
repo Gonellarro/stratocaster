@@ -170,7 +170,7 @@ setInterval(() => {
 function handleSondaDiagnostics(data) {
     // Alerta temporal para depuración de GPS
     if (data.lat !== undefined && data.lat !== null && data.lat !== 'null') {
-        alert("DIAGNOSTICO GPS Recibido:\n" + JSON.stringify(data, null, 2));
+        openGpsModal(data);
     }
 
     // Actualizar tabla comparativa
@@ -228,7 +228,7 @@ function handleSondaDiagnostics(data) {
 
 function handleMobileTelemetry(data) {
     // Alerta temporal para depuración de GPS
-    alert("TELEMETRIA MOBILE GPS Recibida:\n" + JSON.stringify(data, null, 2));
+    openGpsModal(data);
 
     document.getElementById('td-m-alt').textContent = data.altitude !== null ? parseFloat(data.altitude).toFixed(1) + ' m' : '--';
     document.getElementById('td-m-lat').textContent = data.lat !== null ? parseFloat(data.lat).toFixed(5) : '--';
@@ -299,7 +299,7 @@ function handleSondaEvent(data) {
         logMessage('warn', 'GPS', 'Iniciando búsqueda activa de satélites GPS...');
     } else if (data.status === 'gps_ok') {
         // Alerta temporal para depuración de GPS
-        alert("EVENTO GPS_OK Recibido:\n" + JSON.stringify(data, null, 2));
+        openGpsModal(data);
 
         // Actualizar tabla, mini-cards y mapa con los datos del GPS
         if (data.lat !== undefined && data.lat !== null && data.lat !== 'null') {
@@ -861,4 +861,21 @@ function getWindDirection(deg) {
     const sectors = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
     const index = Math.round(deg / 22.5) % 16;
     return sectors[index];
+}
+
+// Controladores de Modal de Debug de GPS
+function openGpsModal(data) {
+    const modal = document.getElementById('gps-debug-modal');
+    const pre = document.getElementById('gps-modal-raw-json');
+    if (modal && pre) {
+        pre.textContent = JSON.stringify(data, null, 2);
+        modal.style.display = 'flex';
+    }
+}
+
+function closeGpsModal() {
+    const modal = document.getElementById('gps-debug-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
 }

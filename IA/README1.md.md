@@ -242,6 +242,7 @@ Aquí tienes un archivo `README.md` completo, estructurado y listo para usar com
 
 ---
 
+
 # Despliegue de Visión Artificial Local (Qwen3-VL) en Dispositivos Android mediante Termux
 
 Este componente del proyecto describe la infraestructura, el proceso de compilación y la ejecución de Modelos de Lenguaje Multimodales (VLM) de forma 100% local en un smartphone embebido. El objetivo final es dotar a la sonda de capacidad de "percepción visual" autónoma para analizar el entorno sin dependencia de conectividad en la nube.

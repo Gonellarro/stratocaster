@@ -486,7 +486,7 @@ body {
 .camera-tabs { display: flex; gap: 0.5rem; }
 .camera-tab {
     background: none; border: none; color: var(--text-muted);
-    font-size: 0.7rem; font-weight: 600; cursor: pointer;
+    font-size: 0.7rem; font-weight: 600; cursor: default;
     padding: 0.2rem 0.5rem; border-radius: 4px;
 }
 .camera-tab.active { background: rgba(56, 189, 248, 0.1); color: var(--cyan-accent); }

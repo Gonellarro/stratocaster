@@ -152,7 +152,7 @@ handle_command() {
             
         "test_video_on")
             echo "[📹 VIDEO] Test de vídeo: Iniciando streaming..."
-            am start -n flutter.vdo.ninja/.MainActivity &>/dev/null
+            am start -a android.intent.action.VIEW -d "https://vdo.ninja/?push=sonda_stratocaster&facing=back&autostart&noaudio&videobitrate=1000&quality=2" &>/dev/null
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "video_streaming_on"}'
             ;;
             
@@ -266,6 +266,9 @@ echo "====================================================="
 echo "  [FASE 1] ¡IGNICIÓN! Sonda en vuelo."
 echo "  Transmitiendo vídeo en directo y telemetría de rampa..."
 echo "====================================================="
+
+# Arrancar el vídeo en directo de forma automática en el despegue (cámara trasera, autostart, sin audio y bitrate controlado)
+am start -a android.intent.action.VIEW -d "https://vdo.ninja/?push=sonda_stratocaster&facing=back&autostart&noaudio&videobitrate=1000&quality=2" &>/dev/null
 
 sleep 10
 

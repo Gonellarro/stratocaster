@@ -271,7 +271,7 @@ rm -f "$ARMED_FLAG"
         CMD=$(echo "$line" | jq -r '.cmd // empty')
         if [ -n "$CMD" ]; then
             # Redirigir entrada estándar y lanzar en segundo plano para evitar bloqueos
-            handle_command "$CMD" </dev/null &
+            handle_command "$CMD" </dev/null
         fi
     done
 ) &

@@ -1409,9 +1409,9 @@ def control_panel():
                 {
                     id: 'chk-gps',
                     name: 'GPS Sonda',
-                    run: () => { sendCommand('get_status'); },
+                    run: () => { sendCommand('init_gps'); },
                     check: () => checks.gps,
-                    timeout: 6000
+                    timeout: 20000 // Subimos a 20s para permitir la inicialización y búsqueda de satélites física
                 },
                 {
                     id: 'chk-battery',

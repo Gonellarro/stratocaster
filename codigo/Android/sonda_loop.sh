@@ -78,9 +78,14 @@ get_gps_location() {
     local LOC_JSON=""
     # 1. Intentar leer la última posición reportada por el listener pasivo
     if [ -f "$GPS_LOG" ] && [ -s "$GPS_LOG" ]; then
-        LOC_JSON=$(tail -n 1 "$GPS_LOG" 2>/dev/null)
+        local TEMP_JSON
+        TEMP_JSON=$(tail -n 1 "$GPS_LOG" 2>/dev/null)
+        # Verificar que sea un objeto JSON completo válido (empieza por { y termina por })
+        if [[ "$TEMP_JSON" == \{*\} ]]; then
+            LOC_JSON="$TEMP_JSON"
+        fi
     fi
-    # 2. Fallback a caché de red rápida si no hay datos en el log
+    # 2. Fallback a caché de red rápida si no hay datos válidos en el log
     if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ]; then
         LOC_JSON=$(timeout 2 termux-location -p network -r last 2>/dev/null)
     fi
@@ -88,7 +93,13 @@ get_gps_location() {
     if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ]; then
         LOC_JSON=$(timeout 2 termux-location -p gps -r last 2>/dev/null)
     fi
-    echo "$LOC_JSON"
+    
+    # Asegurar que al menos devolvemos un JSON vacío válido para evitar romper jq
+    if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ] || [[ "$LOC_JSON" != \{*\} ]]; then
+        echo "{}"
+    else
+        echo "$LOC_JSON"
+    fi
 }
 
 # ------------------------------------------------------------------------------

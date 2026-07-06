@@ -1489,14 +1489,6 @@ def control_panel():
                     check: () => checks.camera_foto,
                     timeout: 20000, // La inferencia local y upload toma tiempo
                     retries: 1 // No queremos reintentar inferencias pesadas
-                },
-                {
-                    id: 'chk-video',
-                    name: 'Cámara (Vídeo)',
-                    run: () => { sendCommand('test_video_on'); },
-                    check: () => checks.camera_video,
-                    timeout: 6000,
-                    retries: 2
                 }
             ];
 

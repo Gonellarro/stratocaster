@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galería de Capturas de Sonda</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- Enlace al CSS separado -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/fotos.css') }}" />
+</head>
+<body>
+    <div class="container">
+        <a href="/control" class="back-btn">← Volver al Panel de Control</a>
+        <header>
+            <h1>Galería de Capturas de la Sonda</h1>
+            <p>Historial de imágenes procesadas e inferencia local de la IA en tiempo real</p>
+        </header>
+
+        {% if fotos %}
+        <div class="grid">
+            {% for foto in fotos %}
+            <div class="card">
+                <div class="image-container" onclick="openLightbox('/images/{{ foto.filename }}', '{{ foto.texto }}')">
+                    <img src="/images/{{ foto.filename }}" alt="Captura de Sonda">
+                </div>
+                <div class="content">
+                    <span class="time-badge">{{ foto.timestamp }}</span>
+                    <p class="description">{{ foto.texto }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 4rem; color: var(--text-muted);">
+            <p>Aún no se han recibido imágenes. Las capturas aparecerán aquí a medida que se suban.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div id="lightbox" class="lightbox" onclick="closeLightbox()">
+        <div class="lightbox-content" onclick="event.stopPropagation()">
+            <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
+            <img id="lightbox-img" src="" alt="Ampliada">
+            <p id="lightbox-txt" class="lightbox-caption"></p>
+        </div>
+    </div>
+
+    <!-- Enlace al JS separado -->
+    <script src="{{ url_for('static', filename='js/fotos.js') }}"></script>
+</body>
+</html>

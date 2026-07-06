@@ -61,8 +61,35 @@ TIEMPO=10
 # Asegurar que la CPU de Android no entre en reposo profundo
 termux-wake-lock
 
-# Liberar el wake lock automáticamente al salir del script
-trap 'echo "[INFO] Liberando wake lock de Termux..."; rm -f "$ARMED_FLAG"; termux-wake-unlock' EXIT
+# Definir ruta para el log de posicionamiento pasivo continuo
+GPS_LOG="$HOME/imagenes/gps_updates.json"
+rm -f "$GPS_LOG"
+
+# Iniciar la suscripción pasiva a actualizaciones de ubicación en segundo plano
+# (Android adora esto: es eficiente, no bloquea y mantiene el hardware activo dinámicamente)
+termux-location -r updates > "$GPS_LOG" 2>/dev/null &
+GPS_PID=$!
+
+# Liberar recursos y matar el proceso de GPS al salir del script
+trap 'echo "[INFO] Liberando recursos y deteniendo GPS pasivo..."; kill -9 $GPS_PID 2>/dev/null; rm -f "$ARMED_FLAG"; termux-wake-unlock' EXIT
+
+# Función auxiliar para leer la mejor localización disponible al instante sin bloquear
+get_gps_location() {
+    local LOC_JSON=""
+    # 1. Intentar leer la última posición reportada por el listener pasivo
+    if [ -f "$GPS_LOG" ] && [ -s "$GPS_LOG" ]; then
+        LOC_JSON=$(tail -n 1 "$GPS_LOG" 2>/dev/null)
+    fi
+    # 2. Fallback a caché de red rápida si no hay datos en el log
+    if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ]; then
+        LOC_JSON=$(timeout 2 termux-location -p network -r last 2>/dev/null)
+    fi
+    # 3. Fallback a caché de GPS rápida si falla la red
+    if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ]; then
+        LOC_JSON=$(timeout 2 termux-location -p gps -r last 2>/dev/null)
+    fi
+    echo "$LOC_JSON"
+}
 
 # ------------------------------------------------------------------------------
 # DEFINICIÓN DE MANEJADOR DE COMANDOS (T-MINUS & DIAGNÓSTICOS)
@@ -78,11 +105,8 @@ handle_command() {
             BAT_LVL=$(echo "$BAT_JSON" | jq -r '.percentage // 0')
             BAT_TEMP=$(echo "$BAT_JSON" | jq -r '.temperature // 0')
             
-            # 2. Obtener GPS rápido (última posición conocida) para rampa
-            LOC_JSON=$(timeout 3 termux-location -p network -r last 2>/dev/null)
-            if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ]; then
-                LOC_JSON=$(timeout 3 termux-location -p gps -r last 2>/dev/null)
-            fi
+            # 2. Obtener GPS instantáneo usando la función auxiliar pasiva
+            LOC_JSON=$(get_gps_location)
             LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
             LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')
             ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
@@ -109,13 +133,9 @@ handle_command() {
             
             # Ejecutar búsqueda de satélites activa en segundo plano (puede tardar 10-15s)
             (
-                # Intentar primero por GPS físico (satélites)
-                LOC_JSON=$(timeout 15 termux-location -p gps 2>/dev/null)
-                # Si falla o está vacío, intentar por red (celular/WiFi) para posibilitar pruebas en interiores
-                if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ]; then
-                    echo "[🛰️ GPS] Reintentando por proveedor de red (interiores)..."
-                    LOC_JSON=$(timeout 8 termux-location -p network 2>/dev/null)
-                fi
+                # Esperar un par de segundos a que el GPS pasivo enganche o leer la mejor posición disponible
+                sleep 2
+                LOC_JSON=$(get_gps_location)
                 if [ -n "$LOC_JSON" ] && [ "$LOC_JSON" != "{}" ]; then
                     LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
                     LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')
@@ -193,11 +213,8 @@ handle_command() {
                     --no-warmup \
                     -p "$PROMPT" 2> "$LOG_TMP" </dev/null)
                 
-                # Obtener GPS rápido
-                LOC_JSON=$(timeout 5 termux-location -p gps -r last 2>/dev/null)
-                if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ]; then
-                    LOC_JSON=$(timeout 5 termux-location -p network -r last 2>/dev/null)
-                fi
+                # Obtener GPS instantáneo
+                LOC_JSON=$(get_gps_location)
                 LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
                 LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')
                 ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
@@ -310,11 +327,8 @@ TIMEOUT_SAFETY=600 # 10 minutos de transmisión límite antes de pasar a fotos a
 while true; do
     echo "[$(date +%T)] 📍 Midiendo altitud de vuelo..."
     
-    # Adquisición de GPS en segundo plano
-    LOC_JSON=$(timeout 4 termux-location -p gps -r last 2>/dev/null)
-    if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ]; then
-        LOC_JSON=$(timeout 4 termux-location -p network -r last 2>/dev/null)
-    fi
+    # Adquisición de GPS instantánea
+    LOC_JSON=$(get_gps_location)
     
     LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
     LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')
@@ -438,10 +452,7 @@ while true; do
         
         # Geolocalizar
         if command -v termux-location &> /dev/null; then
-            LOC_JSON=$(timeout 5 termux-location -p gps -r last 2>/dev/null)
-            if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ]; then
-                LOC_JSON=$(timeout 5 termux-location -p network -r last 2>/dev/null)
-            fi
+            LOC_JSON=$(get_gps_location)
             
             if [ -n "$LOC_JSON" ] && [ "$LOC_JSON" != "{}" ]; then
                 LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')

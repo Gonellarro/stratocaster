@@ -139,40 +139,38 @@ handle_command() {
         "init_gps")
             # Forzar inicialización activa del GPS físico
             echo "[🛰️ GPS] Iniciando receptor GPS (búsqueda activa)..."
-            termux-tts-speak "Iniciando búsqueda de satélites GPS." 2>/dev/null
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "gps_initializing"}'
+            # TTS no bloqueante
+            termux-tts-speak "Iniciando búsqueda de satélites GPS." 2>/dev/null &
             
-            # Ejecutar búsqueda de satélites activa en segundo plano (puede tardar 10-15s)
-            (
-                # Esperar un par de segundos a que el GPS pasivo enganche o leer la mejor posición disponible
-                sleep 2
-                LOC_JSON=$(get_gps_location)
-                if [ -n "$LOC_JSON" ] && [ "$LOC_JSON" != "{}" ]; then
-                    LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
-                    LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')
-                    ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
-                    ACC=$(echo "$LOC_JSON" | jq -r '.accuracy // "null"')
-                    
-                    STATUS_PAYLOAD=$(jq -n \
-                      --argjson lat "$LAT" \
-                      --argjson lng "$LNG" \
-                      --argjson alt "$ALT" \
-                      --argjson acc "$ACC" \
-                      '{status: "gps_ok", lat: $lat, lng: $lng, alt: $alt, accuracy: $acc}')
-                      
-                    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m "$STATUS_PAYLOAD"
-                    termux-tts-speak "Señal de GPS fijada correctamente." 2>/dev/null
-                else
-                    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "gps_failed"}'
-                    termux-tts-speak "Error al fijar señal de GPS. Por favor, asegure visibilidad al cielo." 2>/dev/null
-                fi
-            ) &
+            # Esperar un par de segundos a que el GPS pasivo enganche o leer la mejor posición disponible
+            sleep 2
+            LOC_JSON=$(get_gps_location)
+            if [ -n "$LOC_JSON" ] && [ "$LOC_JSON" != "{}" ]; then
+                LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
+                LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')
+                ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
+                ACC=$(echo "$LOC_JSON" | jq -r '.accuracy // "null"')
+                
+                STATUS_PAYLOAD=$(jq -n \
+                  --argjson lat "$LAT" \
+                  --argjson lng "$LNG" \
+                  --argjson alt "$ALT" \
+                  --argjson acc "$ACC" \
+                  '{status: "gps_ok", lat: $lat, lng: $lng, alt: $alt, accuracy: $acc}')
+                  
+                mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m "$STATUS_PAYLOAD"
+                termux-tts-speak "Señal de GPS fijada correctamente." 2>/dev/null &
+            else
+                mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "gps_failed"}'
+                termux-tts-speak "Error al fijar señal de GPS." 2>/dev/null &
+            fi
             ;;
             
         "test_audio")
-            # Test físico de audio
-            termux-tts-speak "Sonda en línea y lista para la comprobación." 2>/dev/null
+            # Test físico de audio: enviar confirmación ANTES de hablar para no bloquear la web
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "audio_ok"}'
+            termux-tts-speak "Sonda en línea y lista para la comprobación." 2>/dev/null &
             ;;
             
         "test_video_on")
@@ -294,12 +292,13 @@ echo "====================================================="
 rm -f "$ARMED_FLAG"
 
 # Suscriptor MQTT de fondo
+# IMPORTANTE: handle_command se lanza en segundo plano (&) para que el pipe de
+# mosquitto_sub nunca se bloquee esperando a que un comando lento (TTS, foto, IA) termine.
 (
     mosquitto_sub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/comando" 2>/dev/null | while read -r line; do
         CMD=$(echo "$line" | jq -r '.cmd // empty')
         if [ -n "$CMD" ]; then
-            # Redirigir entrada estándar y lanzar en segundo plano para evitar bloqueos
-            handle_command "$CMD" </dev/null
+            handle_command "$CMD" </dev/null &
         fi
     done
 ) &

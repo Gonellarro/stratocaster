@@ -169,11 +169,6 @@ setInterval(() => {
 
 // 4. Manejadores de Recepción de Datos
 function handleSondaDiagnostics(data) {
-    // Alerta temporal para depuración de GPS
-    if (data.lat !== undefined && data.lat !== null && data.lat !== 'null') {
-        openGpsModal(data);
-    }
-
     // Actualizar tabla comparativa
     document.getElementById('td-m-sats').textContent = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null") ? 'Sí (Prec: ' + data.accuracy + 'm)' : 'Sí (Sin Prec.)';
     document.getElementById('td-m-alt').textContent = data.alt !== null ? parseFloat(data.alt).toFixed(1) + ' m' : '--';
@@ -229,9 +224,7 @@ function handleSondaDiagnostics(data) {
 }
 
 function handleMobileTelemetry(data) {
-    // Alerta temporal para depuración de GPS
-    openGpsModal(data);
-
+    // Telemetría GPS móvil recibida
     document.getElementById('td-m-alt').textContent = data.altitude !== null ? parseFloat(data.altitude).toFixed(1) + ' m' : '--';
     document.getElementById('td-m-lat').textContent = data.lat !== null ? parseFloat(data.lat).toFixed(5) : '--';
     document.getElementById('td-m-lng').textContent = data.lng !== null ? parseFloat(data.lng).toFixed(5) : '--';
@@ -307,9 +300,6 @@ function handleSondaEvent(data) {
         updateChecklistUI('chk-gps', 'testing', 'Buscando satélites...');
         logMessage('warn', 'GPS', 'Iniciando búsqueda activa de satélites GPS...');
     } else if (data.status === 'gps_ok') {
-        // Alerta temporal para depuración de GPS
-        openGpsModal(data);
-
         // Actualizar tabla, mini-cards y mapa con los datos del GPS
         if (data.lat !== undefined && data.lat !== null && data.lat !== 'null') {
             document.getElementById('td-m-lat').textContent = parseFloat(data.lat).toFixed(5);
@@ -652,9 +642,8 @@ function updateGeneralStatusLarge() {
 function validateChecklist() {
     const btn = document.getElementById('btn-arm');
     
-    // Checklist de despegue requiere obligatoriamente:
-    // Móvil conectado, LoRa conectado, Foto Ok, Video OK, Batería OK, Sensores OK, GPS OK
-    const isReady = checks.movil && checks.lora_telemetria && checks.camera_foto && checks.camera_video && checks.battery && checks.sensors && checks.gps;
+    // Checklist de despegue requiere obligatoriamente los checks del móvil y sus sensores completados:
+    const isReady = checks.movil && checks.gps && checks.battery && checks.sensors && checks.audio && checks.camera_foto;
     
     if (isReady && mission.state === 'espera') {
         btn.disabled = false;

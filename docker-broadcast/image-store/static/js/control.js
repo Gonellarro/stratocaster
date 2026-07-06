@@ -637,14 +637,12 @@ function updateGeneralStatusLarge() {
     
     let disconnectedCount = 0;
     if (!checks.movil) disconnectedCount++;
-    if (!checks.lora_telemetria) disconnectedCount++;
+    // Se omite el check de LoRa del estado general ya que está puenteado (Omitido)
+    // if (!checks.lora_telemetria) disconnectedCount++;
     
     if (disconnectedCount === 0) {
         large.textContent = 'OK';
         large.className = 'header-pill';
-    } else if (disconnectedCount === 1) {
-        large.textContent = 'WARN';
-        large.className = 'header-pill warn';
     } else {
         large.textContent = 'ALERTA';
         large.className = 'header-pill alarm';

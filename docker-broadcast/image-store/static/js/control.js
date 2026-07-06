@@ -168,8 +168,13 @@ setInterval(() => {
 
 // 4. Manejadores de Recepción de Datos
 function handleSondaDiagnostics(data) {
+    // Alerta temporal para depuración de GPS
+    if (data.lat !== undefined && data.lat !== null && data.lat !== 'null') {
+        alert("DIAGNOSTICO GPS Recibido:\n" + JSON.stringify(data, null, 2));
+    }
+
     // Actualizar tabla comparativa
-    document.getElementById('td-m-sats').textContent = data.accuracy ? 'Sí (Prec: ' + data.accuracy + 'm)' : 'Sí';
+    document.getElementById('td-m-sats').textContent = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null") ? 'Sí (Prec: ' + data.accuracy + 'm)' : 'Sí (Sin Prec.)';
     document.getElementById('td-m-alt').textContent = data.alt !== null ? parseFloat(data.alt).toFixed(1) + ' m' : '--';
     document.getElementById('td-m-lat').textContent = data.lat !== null ? parseFloat(data.lat).toFixed(5) : '--';
     document.getElementById('td-m-lng').textContent = data.lng !== null ? parseFloat(data.lng).toFixed(5) : '--';
@@ -180,7 +185,7 @@ function handleSondaDiagnostics(data) {
     // Mini-cards
     document.getElementById('mini-bat').textContent = data.level + '%';
     document.getElementById('mini-temp').textContent = data.temp + '°C';
-    document.getElementById('mini-gps').textContent = data.accuracy ? 'Acc: ' + data.accuracy + 'm' : 'Fijo';
+    document.getElementById('mini-gps').textContent = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null") ? 'Acc: ' + data.accuracy + 'm' : 'Fijo (Sin Prec.)';
 
     if (data.alt !== null && data.alt !== 'null') {
         document.getElementById('mini-alt').textContent = parseFloat(data.alt).toFixed(1) + ' m';
@@ -205,18 +210,26 @@ function handleSondaDiagnostics(data) {
         updateChecklistUI('chk-battery', false, data.level + '% (Batería Baja!)');
     }
 
-    if (data.accuracy && data.accuracy <= 10) {
+    // Validación de GPS
+    const hasAcc = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null");
+    if (hasAcc && data.accuracy <= 15) {
         checks.gps = true;
         updateChecklistUI('chk-gps', 'ok', 'Fijo (' + data.accuracy + 'm)');
+    } else if (data.lat !== null && data.lat !== 'null' && data.lat !== 0) {
+        // Si tenemos coordenadas válidas pero no hay precisión o es baja, lo marcamos como warn en lugar de ko
+        checks.gps = true;
+        updateChecklistUI('chk-gps', 'warn', hasAcc ? 'Fijo (' + data.accuracy + 'm)' : 'Fijo (Sin Prec.)');
     } else if (!checks.gps) {
-        // Solo marcar como fallo si init_gps no lo habia confirmado previamente
-        updateChecklistUI('chk-gps', 'ko', data.accuracy ? 'Acc: ' + data.accuracy + 'm (Insuficiente)' : 'Sin Enlace');
+        updateChecklistUI('chk-gps', 'ko', 'Sin Enlace');
     }
 
     validateChecklist();
 }
 
 function handleMobileTelemetry(data) {
+    // Alerta temporal para depuración de GPS
+    alert("TELEMETRIA MOBILE GPS Recibida:\n" + JSON.stringify(data, null, 2));
+
     document.getElementById('td-m-alt').textContent = data.altitude !== null ? parseFloat(data.altitude).toFixed(1) + ' m' : '--';
     document.getElementById('td-m-lat').textContent = data.lat !== null ? parseFloat(data.lat).toFixed(5) : '--';
     document.getElementById('td-m-lng').textContent = data.lng !== null ? parseFloat(data.lng).toFixed(5) : '--';
@@ -232,9 +245,13 @@ function handleMobileTelemetry(data) {
         paths.movil.addLatLng(latlng);
     }
     
-    if (data.accuracy && data.accuracy <= 10) {
+    const hasAcc = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null");
+    if (hasAcc && data.accuracy <= 15) {
         checks.gps = true;
         updateChecklistUI('chk-gps', true, 'Fijo (' + data.accuracy + 'm)');
+    } else if (data.lat !== null && data.lat !== 0) {
+        checks.gps = true;
+        updateChecklistUI('chk-gps', 'warn', hasAcc ? 'Fijo (' + data.accuracy + 'm)' : 'Fijo (Sin Prec.)');
     }
     validateChecklist();
 }
@@ -281,6 +298,9 @@ function handleSondaEvent(data) {
         updateChecklistUI('chk-gps', 'testing', 'Buscando satélites...');
         logMessage('warn', 'GPS', 'Iniciando búsqueda activa de satélites GPS...');
     } else if (data.status === 'gps_ok') {
+        // Alerta temporal para depuración de GPS
+        alert("EVENTO GPS_OK Recibido:\n" + JSON.stringify(data, null, 2));
+
         // Actualizar tabla, mini-cards y mapa con los datos del GPS
         if (data.lat !== undefined && data.lat !== null && data.lat !== 'null') {
             document.getElementById('td-m-lat').textContent = parseFloat(data.lat).toFixed(5);

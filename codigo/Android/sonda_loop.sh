@@ -1,23 +1,14 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # ==============================================================================
-# ORQUESTRADOR MULTI-FASE DE LA SONDA (STRATOCASTER)
+# ORQUESTRADOR MULTI-FASE SIMPLIFICADO DE LA SONDA (STRATOCASTER)
 # Fase 0: Pruebas y Espera en Rampa
 # Fase 1: Vuelo en Directo (Streaming SRT)
-# Fase 2: Inferencia Autónoma (Captura + Local IA)
+# Fase 2: Bucle Autónomo de Transmisión Directa (Captura y GPS)
 # ==============================================================================
-
-# Definición de rutas absolutas del entorno Termux
-LLAMA_DIR="$HOME/llama.cpp"
-BIN_PATH="$LLAMA_DIR/build/bin/llama-mtmd-cli"
-MODEL_PATH="$LLAMA_DIR/models/qwen/Qwen3VL-2B-Instruct-Q4_K_M.gguf"
-PROJ_PATH="$LLAMA_DIR/models/qwen/mmproj-Qwen3VL-2B-Instruct-F16.gguf"
 
 # RUTAS DE CAPTURA Y TELEMETRÍA
 TARGET_IMG="$HOME/imagenes/foto.jpg"
-TARGET_IMG_LOW="$HOME/imagenes/foto_baja.jpg"  
-RESULT_TXT="$HOME/imagenes/ultimo_resultado.txt"
-LOG_TMP="$HOME/imagenes/llama_log.tmp"
 OFFLINE_LOG="$HOME/imagenes/sonda_offline.log"
 ARMED_FLAG="$HOME/imagenes/sonda.armed"
 
@@ -39,21 +30,12 @@ fi
 mkdir -p "$HOME/imagenes"
 
 # Verificar dependencias críticas de Termux y herramientas
-for cmd in termux-camera-photo termux-wake-lock termux-wake-unlock magick mosquitto_pub mosquitto_sub jq termux-battery-status termux-location termux-tts-speak; do
+for cmd in termux-camera-photo termux-wake-lock termux-wake-unlock mosquitto_pub mosquitto_sub jq termux-battery-status termux-location termux-tts-speak; do
     if ! command -v "$cmd" &> /dev/null; then
         echo "[❌ ERROR] El comando '$cmd' no está instalado en Termux."
-        echo "Asegúrate de instalar los paquetes 'mosquitto', 'jq', 'termux-api' y la app Termux:API en Android."
         exit 1
     fi
 done
-
-if [ ! -x "$BIN_PATH" ]; then
-    echo "[❌ ERROR] No se encontró el ejecutable en $BIN_PATH o no tiene permisos de ejecución."
-    exit 1
-fi
-
-# Prompt corregido usando ANSI-C quoting para interpretar saltos de línea (\n)
-PROMPT=$'<|im_start|>user\nDescribe en una sola frase corta qué se ve en esta imagen.<|im_end|>\n<|im_start|>assistant\n'
 
 # Tiempo de bucle de fotos en fase autónoma
 TIEMPO=10
@@ -66,7 +48,6 @@ GPS_LOG="$HOME/imagenes/gps_updates.json"
 rm -f "$GPS_LOG"
 
 # Iniciar la suscripción pasiva a actualizaciones de ubicación en segundo plano
-# (Android adora esto: es eficiente, no bloquea y mantiene el hardware activo dinámicamente)
 termux-location -r updates > "$GPS_LOG" 2>/dev/null &
 GPS_PID=$!
 
@@ -80,21 +61,21 @@ get_gps_location() {
     if [ -f "$GPS_LOG" ] && [ -s "$GPS_LOG" ]; then
         local TEMP_JSON
         TEMP_JSON=$(tail -n 1 "$GPS_LOG" 2>/dev/null)
-        # Verificar que sea un objeto JSON completo válido (empieza por { y termina por })
+        # Verificar que sea un objeto JSON completo válido
         if [[ "$TEMP_JSON" == \{*\} ]]; then
             LOC_JSON="$TEMP_JSON"
         fi
     fi
-    # 2. Fallback a caché de red rápida si no hay datos válidos en el log
+    # 2. Fallback a caché de red rápida
     if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ]; then
         LOC_JSON=$(timeout 2 termux-location -p network -r last 2>/dev/null)
     fi
-    # 3. Fallback a caché de GPS rápida si falla la red
+    # 3. Fallback a caché de GPS rápida
     if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ]; then
         LOC_JSON=$(timeout 2 termux-location -p gps -r last 2>/dev/null)
     fi
     
-    # Asegurar que al menos devolvemos un JSON vacío válido para evitar romper jq
+    # Asegurar que al menos devolvemos un JSON vacío válido
     if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ] || [[ "$LOC_JSON" != \{*\} ]]; then
         echo "{}"
     else
@@ -116,7 +97,7 @@ handle_command() {
             BAT_LVL=$(echo "$BAT_JSON" | jq -r '.percentage // 0')
             BAT_TEMP=$(echo "$BAT_JSON" | jq -r '.temperature // 0')
             
-            # 2. Obtener GPS instantáneo usando la función auxiliar pasiva
+            # 2. Obtener GPS instantáneo
             LOC_JSON=$(get_gps_location)
             LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
             LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')
@@ -137,13 +118,10 @@ handle_command() {
             ;;
             
         "init_gps")
-            # Forzar inicialización activa del GPS físico
-            echo "[🛰️ GPS] Iniciando receptor GPS (búsqueda activa)..."
+            echo "[🛰️ GPS] Iniciando receptor GPS..."
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "gps_initializing"}'
-            # TTS no bloqueante
-            termux-tts-speak "Iniciando búsqueda de satélites GPS." 2>/dev/null Ok. 
+            termux-tts-speak "Iniciando búsqueda de satélites GPS." 2>/dev/null
             
-            # Esperar un par de segundos a que el GPS pasivo enganche o leer la mejor posición disponible
             sleep 2
             LOC_JSON=$(get_gps_location)
             if [ -n "$LOC_JSON" ] && [ "$LOC_JSON" != "{}" ]; then
@@ -160,29 +138,25 @@ handle_command() {
                   '{status: "gps_ok", lat: $lat, lng: $lng, alt: $alt, accuracy: $acc}')
                   
                 mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m "$STATUS_PAYLOAD"
-                termux-tts-speak "Señal de GPS fijada correctamente." 2>/dev/null &
+                termux-tts-speak "Señal de GPS fijada correctamente." 2>/dev/null
             else
                 mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "gps_failed"}'
-                termux-tts-speak "Error al fijar señal de GPS." 2>/dev/null &
+                termux-tts-speak "Error al fijar señal de GPS." 2>/dev/null
             fi
             ;;
             
         "test_audio")
-            # Test físico de audio: enviar confirmación ANTES de hablar para no bloquear la web
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "audio_ok"}'
-            termux-tts-speak "Sonda en línea y lista para la comprobación." 2>/dev/null &
+            termux-tts-speak "Sonda en línea y lista para la comprobación." 2>/dev/null
             ;;
             
         "test_video_on")
-            # Encender streaming (Soporte VDO.ninja, Chrome o Larix)
             echo "[📹 VIDEO] Test de vídeo: Iniciando streaming..."
-            # Intentar lanzar app nativa VDO.ninja
             am start -n flutter.vdo.ninja/.MainActivity &>/dev/null
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "video_streaming_on"}'
             ;;
             
         "test_video_off")
-            # Apagar todos los posibles codificadores de streaming para liberar la cámara
             echo "[📹 VIDEO] Test de vídeo: Deteniendo streaming..."
             am force-stop flutter.vdo.ninja &>/dev/null
             am force-stop com.android.chrome &>/dev/null
@@ -191,11 +165,9 @@ handle_command() {
             ;;
             
         "test_photo")
-            # Captura de foto e inferencia IA bajo demanda (para pruebas pre-vuelo)
-            echo "[📸 CÁMARA] Solicitud de test de foto e IA local recibida..."
+            echo "[📸 CÁMARA] Solicitud de test de foto..."
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "camera_testing"}'
             
-            # Liberar la cámara deteniendo Chrome/VDO.ninja si estuvieran activos
             am force-stop com.android.chrome &>/dev/null
             am force-stop flutter.vdo.ninja &>/dev/null
             sleep 1
@@ -203,33 +175,14 @@ handle_command() {
             termux-camera-photo -c 0 "$TARGET_IMG"
             
             if [ -f "$TARGET_IMG" ]; then
-                # Redimensionar para optimizar
-                if magick "$TARGET_IMG" -resize 640x480 "$TARGET_IMG_LOW" 2>/dev/null; then
-                    IMG_TO_PROCESS="$TARGET_IMG_LOW"
-                else
-                    IMG_TO_PROCESS="$TARGET_IMG"
-                fi
+                TEXTO_DETECTADO="Captura de verificación de cámara (OK)"
                 
-                echo "Procesando imagen: $IMG_TO_PROCESS"
-                # Ejecutar inferencia de la IA (redirigiendo la entrada estándar para evitar cuelgues)
-                TEXTO_DETECTADO=$("$BIN_PATH" \
-                    -m "$MODEL_PATH" \
-                    --mmproj "$PROJ_PATH" \
-                    --image "$IMG_TO_PROCESS" \
-                    -c 2048 \
-                    -b 256 \
-                    -t 4 \
-                    --no-warmup \
-                    -p "$PROMPT" 2> "$LOG_TMP" </dev/null)
-                
-                # Obtener GPS instantáneo
                 LOC_JSON=$(get_gps_location)
                 LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
                 LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')
                 ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
                 
-                # Subir foto original en alta resolución a la web
-                echo "[📸 CÁMARA] Subiendo foto original a la web..."
+                echo "[📸 CÁMARA] Subiendo foto de test a la web..."
                 UPLOAD_RESP=$(curl -s -F "file=@$TARGET_IMG" -F "texto=$TEXTO_DETECTADO" "$IMAGE_SERVER_URL/upload")
                 
                 if [ $? -eq 0 ] && [ -n "$UPLOAD_RESP" ] && [[ "$UPLOAD_RESP" != *"Error"* ]]; then
@@ -245,9 +198,9 @@ handle_command() {
                       '{texto: $txt, url_imagen: $url, lat: $lat, lng: $lng, alt: $alt}')
                     
                     mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$MQTT_TOPIC" -m "$PAYLOAD"
-                    termux-tts-speak "Comprobación de cámara y modelo de inteligencia artificial completada con éxito." 2>/dev/null
+                    termux-tts-speak "Comprobación de cámara completada con éxito." 2>/dev/null
                 else
-                    echo "[❌ ERROR] Falló la subida de la foto original. Servidor respondió: $UPLOAD_RESP"
+                    echo "[❌ ERROR] Falló la subida de la foto de test: $UPLOAD_RESP"
                     mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "camera_error"}'
                 fi
             else
@@ -256,27 +209,16 @@ handle_command() {
             ;;
             
         "reboot")
-            echo "[⚠️ SISTEMA] Reiniciando dispositivo..."
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "rebooting"}'
-            sleep 2
-            reboot 2>/dev/null || exit 0
+            echo "[⚠️ SISTEMA] Reiniciando el dispositivo móvil..."
+            termux-tts-speak "Reiniciando el sistema de la sonda." 2>/dev/null
+            sleep 1
+            su -c reboot 2>/dev/null || reboot
             ;;
             
         "arm")
-            # ARMAR Y ENTRAR EN MODO VUELO
-            echo "[🚀 SECUENCIA] ¡Comando de ARMADO recibido!"
-            
-            # NOTA: Usando VDO.ninja de forma manual, no reiniciamos la app al armar para no cortar la conexión iniciada a mano.
-            # Simplemente dejamos que la transmisión siga activa.
-            
-            # Avisar al servidor central para arrancar la cuenta atrás visual
-            curl -s -X POST "$IMAGE_SERVER_URL/control_lanzamiento/ok" &>/dev/null
-            
-            # Notificar estado armado por MQTT
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "armed"}'
-            
-            # Escribir el flag físico en disco para notificar al proceso padre (evita subshell lock)
             touch "$ARMED_FLAG"
+            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "armed"}'
+            termux-tts-speak "Sonda Armada. Despegue inminente." 2>/dev/null
             ;;
     esac
 }
@@ -292,8 +234,6 @@ echo "====================================================="
 rm -f "$ARMED_FLAG"
 
 # Suscriptor MQTT de fondo
-# IMPORTANTE: handle_command se lanza en segundo plano (&) para que el pipe de
-# mosquitto_sub nunca se bloquee esperando a que un comando lento (TTS, foto, IA) termine.
 (
     mosquitto_sub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/comando" 2>/dev/null | while read -r line; do
         CMD=$(echo "$line" | jq -r '.cmd // empty')
@@ -308,7 +248,6 @@ SUB_PID=$!
 COUNTER=0
 while [ ! -f "$ARMED_FLAG" ]; do
     if [ $((COUNTER % 10)) -eq 0 ]; then
-        # Solicitar actualización de sensores de forma no bloqueante
         handle_command "get_status" &>/dev/null &
     fi
     sleep 1
@@ -328,24 +267,20 @@ echo "  [FASE 1] ¡IGNICIÓN! Sonda en vuelo."
 echo "  Transmitiendo vídeo en directo y telemetría de rampa..."
 echo "====================================================="
 
-# Espera inicial de 10s mientras el directo se estabiliza (durante la cuenta atrás de tierra)
 sleep 10
 
 START_TIME=$(date +%s)
-TIMEOUT_SAFETY=600 # 10 minutos de transmisión límite antes de pasar a fotos autónomas por seguridad
+TIMEOUT_SAFETY=600
 
 while true; do
     echo "[$(date +%T)] 📍 Midiendo altitud de vuelo..."
     
-    # Adquisición de GPS instantánea
     LOC_JSON=$(get_gps_location)
-    
     LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
     LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')
     ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
     ACC=$(echo "$LOC_JSON" | jq -r '.accuracy // "null"')
     
-    # Publicar telemetría en tiempo real en gps/data
     if [ "$LAT" != "null" ]; then
         GPS_PAYLOAD=$(jq -n \
           --argjson lat "$LAT" \
@@ -357,8 +292,7 @@ while true; do
         echo "[📡 TELEMETRÍA] Enviada: Alt: $ALT m, Acc: $ACC m"
     fi
     
-    # Comprobar límite de altitud para cortar el vídeo (1000 metros)
-    ALT_INT=${ALT%.*} # Convertir a entero
+    ALT_INT=${ALT%.*}
     if [ -n "$ALT_INT" ] && [ "$ALT_INT" != "null" ]; then
         if [ "$ALT_INT" -gt 1000 ]; then
             echo "[🚀 CONTROL] ¡Cota de 1.000m superada! ($ALT_INT m). Entrando en Fase Autónoma..."
@@ -366,7 +300,6 @@ while true; do
         fi
     fi
     
-    # Comprobar timeout de seguridad
     CURRENT_TIME=$(date +%s)
     ELAPSED=$((CURRENT_TIME - START_TIME))
     if [ $ELAPSED -gt $TIMEOUT_SAFETY ]; then
@@ -377,7 +310,7 @@ while true; do
     sleep 5
 done
 
-# Detener retransmisión de vídeo (Soporta VDO.ninja, Chrome y Larix)
+# Detener retransmisión de vídeo
 echo "[🔌 VIDEO] Deteniendo transmisión de vídeo en directo..."
 am force-stop flutter.vdo.ninja &>/dev/null
 am force-stop com.android.chrome &>/dev/null
@@ -385,119 +318,66 @@ am force-stop com.wmspanel.larix_broadcaster &>/dev/null
 sleep 2
 
 # ==============================================================================
-# FASE 2: INFERENCIA AUTÓNOMA Y CAPTURA DE IMÁGENES
+# FASE 2: CAPTURA DE IMÁGENES AUTÓNOMA Y TELEMETRÍA (SIN IA LOCAL)
 # ==============================================================================
 echo "====================================================="
-echo "  [FASE 2] Iniciando bucle de captura autónoma..."
+echo "  [FASE 2] Iniciando bucle de captura autónoma ligera..."
 echo "  Destino de capturas locales: ~/imagenes/"
-echo "  Inferencia local IA con Qwen3-VL activa (Cada $TIEMPO s)"
+echo "  Subida de fotos e información cada $TIEMPO s"
 echo "====================================================="
-
-# Detectar Wifi en las rutas de red (para pruebas locales)
-WIFI_ACTIVE=false
-if command -v termux-wifi-connectioninfo &> /dev/null; then
-    WIFI_INFO=$(termux-wifi-connectioninfo 2>/dev/null)
-    WIFI_IP=$(echo "$WIFI_INFO" | jq -r '.ip // empty')
-    if [ -n "$WIFI_IP" ] && [ "$WIFI_IP" != "0.0.0.0" ]; then
-        WIFI_ACTIVE=true
-    fi
-fi
 
 while true; do
     echo "[$(date +%T)] 📸 Capturando frame desde el sensor óptico..."
     
-    # 1. Captura de foto usando la cámara trasera
     termux-camera-photo -c 0 "$TARGET_IMG"
     
     if [ ! -f "$TARGET_IMG" ]; then
-        echo "[❌ ERROR] No se pudo generar la imagen en $TARGET_IMG. Reintentando en 5s..."
+        echo "[❌ ERROR] No se pudo generar la imagen. Reintentando en 5s..."
         sleep 5
         continue
     fi
 
-    # 1.5. Redimensionar para optimizar procesamiento
-    if magick "$TARGET_IMG" -resize 640x480 "$TARGET_IMG_LOW" 2>/dev/null; then
-        IMG_TO_PROCESS="$TARGET_IMG_LOW"
-    else
-        echo "[⚠️ ADVERTENCIA] Falló el redimensionado. Procesando original..."
-        IMG_TO_PROCESS="$TARGET_IMG"
-    fi
+    # Definir texto descriptivo genérico (IA eliminada del móvil)
+    TEXTO_DETECTADO="Captura en tiempo real - Sonda Stratocaster"
 
-    echo "[$(date +%T)] 🧠 Procesando imagen con Qwen3-VL (Inferencia local)..."
+    # Geolocalizar
+    LAT="null"
+    LNG="null"
+    ALT="null"
+    ACC="null"
     
-    # 2. Ejecución de la IA redirigiendo stderr
-    TEXTO_DETECTADO=$("$BIN_PATH" \
-        -m "$MODEL_PATH" \
-        --mmproj "$PROJ_PATH" \
-        --image "$IMG_TO_PROCESS" \
-        -c 2048 \
-        -b 256 \
-        -t 4 \
-        --no-warmup \
-        -p "$PROMPT" 2> "$LOG_TMP")
-
-    echo "-----------------------------------------------------"
-    echo "📝 TEXTO EXTRAÍDO POR LA IA:"
-    echo "$TEXTO_DETECTADO"
-    echo "-----------------------------------------------------"
-
-    echo "$TEXTO_DETECTADO" > "$RESULT_TXT"
-
-    # Redetectar Wifi en cada ciclo
-    if command -v termux-wifi-connectioninfo &> /dev/null; then
-        WIFI_INFO=$(termux-wifi-connectioninfo 2>/dev/null)
-        WIFI_IP=$(echo "$WIFI_INFO" | jq -r '.ip // empty')
-        if [ -n "$WIFI_IP" ] && [ "$WIFI_IP" != "0.0.0.0" ]; then
-            WIFI_ACTIVE=true
-        else
-            WIFI_ACTIVE=false
-        fi
+    LOC_JSON=$(get_gps_location)
+    if [ -n "$LOC_JSON" ] && [ "$LOC_JSON" != "{}" ]; then
+        LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
+        LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')
+        ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
+        ACC=$(echo "$LOC_JSON" | jq -r '.accuracy // "null"')
     fi
 
-    # Envío de datos
-    if [ "$WIFI_ACTIVE" = true ]; then
-        LAT="null"
-        LNG="null"
-        ALT="null"
+    # Subir foto original a la web
+    echo "[$(date +%T)] 📤 Subiendo foto original..."
+    UPLOAD_RESP=$(curl -s -F "file=@$TARGET_IMG" -F "texto=$TEXTO_DETECTADO" "$IMAGE_SERVER_URL/upload")
+    
+    if [ $? -eq 0 ] && [ -n "$UPLOAD_RESP" ] && [[ "$UPLOAD_RESP" != *"Error"* ]]; then
+        FILENAME="$UPLOAD_RESP"
+        URL_COMPLETA="$IMAGE_SERVER_URL/images/$FILENAME"
+        echo "[✅ OK] Subida exitosa: $URL_COMPLETA"
         
-        # Geolocalizar
-        if command -v termux-location &> /dev/null; then
-            LOC_JSON=$(get_gps_location)
-            
-            if [ -n "$LOC_JSON" ] && [ "$LOC_JSON" != "{}" ]; then
-                LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
-                LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')
-                ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
-            fi
-        fi
+        # Publicar JSON MQTT en sonda/camera
+        PAYLOAD=$(jq -n \
+          --arg txt "$TEXTO_DETECTADO" \
+          --arg url "$URL_COMPLETA" \
+          --argjson lat "$LAT" \
+          --argjson lng "$LNG" \
+          --argjson alt "$ALT" \
+          '{texto: $txt, url_imagen: $url, lat: $lat, lng: $lng, alt: $alt}')
 
-        # Subir foto original en alta resolución a la web
-        echo "[$(date +%T)] 📤 Subiendo foto original y descripción a la web..."
-        UPLOAD_RESP=$(curl -s -F "file=@$TARGET_IMG" -F "texto=$TEXTO_DETECTADO" "$IMAGE_SERVER_URL/upload")
-        
-        if [ $? -eq 0 ] && [ -n "$UPLOAD_RESP" ] && [[ "$UPLOAD_RESP" != *"Error"* ]]; then
-            FILENAME="$UPLOAD_RESP"
-            URL_COMPLETA="$IMAGE_SERVER_URL/images/$FILENAME"
-            echo "[✅ OK] Subida exitosa: $URL_COMPLETA"
-            
-            # Publicar JSON MQTT en sonda/camera
-            PAYLOAD=$(jq -n \
-              --arg txt "$TEXTO_DETECTADO" \
-              --arg url "$URL_COMPLETA" \
-              --argjson lat "$LAT" \
-              --argjson lng "$LNG" \
-              --argjson alt "$ALT" \
-              '{texto: $txt, url_imagen: $url, lat: $lat, lng: $lng, alt: $alt}')
-
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$MQTT_TOPIC" -m "$PAYLOAD"
-            echo "[✅ OK] Datos de telemetría publicados por MQTT."
-        else
-            echo "[❌ ERROR] Falló la subida de foto al servidor web: $UPLOAD_RESP"
-        fi
+        mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$MQTT_TOPIC" -m "$PAYLOAD"
+        echo "[✅ OK] Telemetría y foto publicadas por MQTT."
     else
-        # Modo sin conexión Wifi
-        echo "[$(date +%T)] Guardando registro offline en local..."
-        echo "[$(date +%Y-%m-%d\ %H:%M:%S)] [OFFLINE] Texto IA: $TEXTO_DETECTADO" >> "$OFFLINE_LOG"
+        echo "[❌ ERROR] Falló la subida de foto: $UPLOAD_RESP"
+        # Guardar en log local offline
+        echo "[$(date +%Y-%m-%d\ %H:%M:%S)] [OFFLINE] Lat: $LAT, Lng: $LNG, Alt: $ALT" >> "$OFFLINE_LOG"
     fi
 
     echo "[$(date +%T)] Ciclo completado. Esperando $TIEMPO segundos..."

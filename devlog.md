@@ -121,3 +121,6 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
 * **Reintentos Dinámicos:** Asignados números de reintentos configurables por paso para evitar esperas interminables en pruebas lentas (ej: 1 intento para GPS o LoRa, 3 para la IP del móvil, 2 para TTS).
 * **Nivel de Batería Tricolor:** Clasificación de batería en tres niveles de color en el checklist: Verde (Ok, >=75%), Naranja (Warn, 50-74%) y Rojo (Ko, <50%).
 * **Prevención de Conflictos de Cámara:** Añadido un `am force-stop` a Chrome/VDO.ninja al inicio de `test_photo` en el móvil, garantizando que el hardware de la cámara quede libre para el disparo del test de foto/IA.
+* **Reordenación y Simplificación de Checklist:** Reordenado el listado HTML para coincidir exactamente con el orden secuencial del script de pruebas. Eliminado el paso de test de vídeo automático para evitar congelamientos en caliente.
+* **Bypass de LoRa y Meshtastic:** Se configuraron ambos enlaces para que carguen en verde (`ok`/`Omitido`) directamente al iniciar o resetear, evitando esperas pasivas y permitiendo al operador centrarse en el móvil y la cámara.
+* **Animación de Spinner de Neón:** Reemplazada la animación de los puntos suspensivos por un mini spinner circular de neón cian que gira fluidamente en el interior del checkbox mientras la prueba está en progreso.

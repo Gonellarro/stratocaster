@@ -497,6 +497,7 @@ function executeCurrentStep() {
 function handleStepSuccess() {
     clearTimeout(stepTimeoutTimer);
     const step = testSteps[currentStepIndex];
+    if (!step) return;
     
     // Para la batería, mostramos su estado warn/ok real
     if (step.id === 'chk-battery') {
@@ -537,6 +538,10 @@ function handleStepSuccess() {
 
 function handleStepTimeout() {
     const step = testSteps[currentStepIndex];
+    if (!step) {
+        clearTimeout(stepTimeoutTimer);
+        return;
+    }
     if (step.check()) {
         handleStepSuccess();
         return;

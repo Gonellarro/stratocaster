@@ -104,7 +104,7 @@ handle_command() {
         "init_gps")
             # Forzar inicialización activa del GPS físico
             echo "[🛰️ GPS] Iniciando receptor GPS (búsqueda activa)..."
-            termux-tts-speak "Iniciando búsqueda de satélites GPS." 2>/dev/null
+            termux-tts-speak "Iniciando búsqueda de satélites GPS." 2>/dev/null &
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "gps_initializing"}'
             
             # Ejecutar búsqueda de satélites activa en segundo plano (puede tardar 10-15s)
@@ -130,17 +130,17 @@ handle_command() {
                       '{status: "gps_ok", lat: $lat, lng: $lng, alt: $alt, accuracy: $acc}')
                       
                     mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m "$STATUS_PAYLOAD"
-                    termux-tts-speak "Señal de GPS fijada correctamente." 2>/dev/null
+                    termux-tts-speak "Señal de GPS fijada correctamente." 2>/dev/null &
                 else
                     mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "gps_failed"}'
-                    termux-tts-speak "Error al fijar señal de GPS. Por favor, asegure visibilidad al cielo." 2>/dev/null
+                    termux-tts-speak "Error al fijar señal de GPS. Por favor, asegure visibilidad al cielo." 2>/dev/null &
                 fi
             ) &
             ;;
             
         "test_audio")
             # Test físico de audio
-            termux-tts-speak "Sonda en línea y lista para la comprobación." 2>/dev/null
+            termux-tts-speak "Sonda en línea y lista para la comprobación." 2>/dev/null &
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "audio_ok"}'
             ;;
             

@@ -141,7 +141,7 @@ handle_command() {
             echo "[🛰️ GPS] Iniciando receptor GPS (búsqueda activa)..."
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "gps_initializing"}'
             # TTS no bloqueante
-            termux-tts-speak "Iniciando búsqueda de satélites GPS." 2>/dev/null &
+            termux-tts-speak "Iniciando búsqueda de satélites GPS." 2>/dev/null Ok. 
             
             # Esperar un par de segundos a que el GPS pasivo enganche o leer la mejor posición disponible
             sleep 2

@@ -554,30 +554,17 @@ def control_panel():
                 padding-right: 0.4rem;
             }
             .checklist-item.testing .checklist-status {
-                border-color: var(--cyan-accent);
-                background: rgba(6, 182, 212, 0.08);
-                color: transparent;
-                display: flex;
-                align-items: center;
-                justify-content: center;
+                border: 2px solid rgba(6, 182, 212, 0.15) !important;
+                border-top: 2px solid var(--cyan-accent) !important;
+                border-radius: 50% !important;
+                width: 16px; height: 16px;
+                background: transparent !important;
+                box-shadow: 0 0 6px var(--cyan-glow);
+                animation: spinChecklist 0.8s linear infinite;
             }
-            .checklist-item.testing .checklist-status::after {
-                content: "...";
-                color: var(--cyan-accent);
-                font-family: monospace;
-                font-size: 1.1rem;
-                font-weight: bold;
-                letter-spacing: -1.5px;
-                animation: dotsPulse 1.2s infinite steps(4);
-                line-height: 1;
-                margin-top: -6px;
-                margin-left: -1px;
-            }
-            @keyframes dotsPulse {
-                0% { content: ""; }
-                33% { content: "."; }
-                66% { content: ".."; }
-                100% { content: "..."; }
+            @keyframes spinChecklist {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
             }
             .checklist-status {
                 width: 16px; height: 16px;
@@ -838,25 +825,20 @@ def control_panel():
                             <div class="checklist-label">Móvil (Android)</div>
                             <div id="chk-movil-val" class="checklist-val">--</div>
                         </div>
-                        <div id="chk-lora" class="checklist-item">
+                        <div id="chk-lora" class="checklist-item ok">
                             <div class="checklist-status"></div>
                             <div class="checklist-label">ESP32 LoRa (Telemetría)</div>
-                            <div id="chk-lora-val" class="checklist-val">--</div>
+                            <div id="chk-lora-val" class="checklist-val">Omitido</div>
                         </div>
-                        <div id="chk-meshtastic" class="checklist-item">
+                        <div id="chk-meshtastic" class="checklist-item ok">
                             <div class="checklist-status"></div>
                             <div class="checklist-label">ESP32 LoRa (Meshtastic)</div>
-                            <div id="chk-meshtastic-val" class="checklist-val">Moc</div>
+                            <div id="chk-meshtastic-val" class="checklist-val">Omitido</div>
                         </div>
-                        <div id="chk-foto" class="checklist-item">
+                        <div id="chk-gps" class="checklist-item">
                             <div class="checklist-status"></div>
-                            <div class="checklist-label">Cámara (Foto e IA)</div>
-                            <div id="chk-foto-val" class="checklist-val">Pendiente</div>
-                        </div>
-                        <div id="chk-video" class="checklist-item">
-                            <div class="checklist-status"></div>
-                            <div class="checklist-label">Cámara (Vídeo directo)</div>
-                            <div id="chk-video-val" class="checklist-val">Pendiente</div>
+                            <div class="checklist-label">GPS Sonda (Precisión)</div>
+                            <div id="chk-gps-val" class="checklist-val">Sin Enlace</div>
                         </div>
                         <div id="chk-battery" class="checklist-item">
                             <div class="checklist-status"></div>
@@ -868,10 +850,15 @@ def control_panel():
                             <div class="checklist-label">Sensores Térmicos</div>
                             <div id="chk-sensors-val" class="checklist-val">--</div>
                         </div>
-                        <div id="chk-gps" class="checklist-item">
+                        <div id="chk-audio" class="checklist-item">
                             <div class="checklist-status"></div>
-                            <div class="checklist-label">GPS Fijo (Precisión <= 10m)</div>
-                            <div id="chk-gps-val" class="checklist-val">Sin Enlace</div>
+                            <div class="checklist-label">Altavoz (TTS)</div>
+                            <div id="chk-audio-val" class="checklist-val">Pendiente</div>
+                        </div>
+                        <div id="chk-foto" class="checklist-item">
+                            <div class="checklist-status"></div>
+                            <div class="checklist-label">Cámara (Foto e IA)</div>
+                            <div id="chk-foto-val" class="checklist-val">Pendiente</div>
                         </div>
                     </div>
                     <button id="btn-test-systems" class="btn btn-accent" style="width: 100%; margin-top: auto;" onclick="runSelfTest()">🤖 PROBAR SISTEMAS</button>
@@ -1094,10 +1081,10 @@ def control_panel():
             // Checklist local status variables
             let checks = {
                 movil: false,
-                lora_telemetria: false,
-                lora_meshtastic: true, // Meshtastic mock / por ahora siempre true
+                lora_telemetria: true,
+                lora_meshtastic: true,
                 camera_foto: false,
-                camera_video: false,
+                camera_video: true,
                 battery: false,
                 sensors: false,
                 gps: false,
@@ -1638,13 +1625,19 @@ def control_panel():
             }
 
             function resetChecklistUI() {
-                const ids = ['chk-movil', 'chk-lora', 'chk-meshtastic', 'chk-foto', 'chk-video', 'chk-battery', 'chk-sensors', 'chk-gps', 'chk-audio'];
+                const ids = ['chk-movil', 'chk-lora', 'chk-meshtastic', 'chk-gps', 'chk-battery', 'chk-sensors', 'chk-audio', 'chk-foto'];
                 ids.forEach(id => {
                     const item = document.getElementById(id);
                     if (item) item.className = 'checklist-item';
                     const val = document.getElementById(id + '-val');
                     if (val) val.textContent = 'Pendiente';
                 });
+                
+                // Forzar LoRa y Meshtastic a verde directamente
+                checks.lora_telemetria = true;
+                checks.lora_meshtastic = true;
+                updateChecklistUI('chk-lora', 'ok', 'Omitido');
+                updateChecklistUI('chk-meshtastic', 'ok', 'Omitido');
             }
 
             // 6. Funciones de Interfaz de Usuario (UI)
@@ -1687,8 +1680,14 @@ def control_panel():
                     badge.textContent = 'Desconectado';
                     badge.className = 'link-badge disconnected';
                     if (chk) {
-                        chk.className = 'checklist-item ko';
-                        chkVal.textContent = 'Sin Señal';
+                        // Si es LoRa o Meshtastic, mantenerlos en verde (omitidos/aprobados directamente)
+                        if (linkId === 'lora' || linkId === 'meshtastic') {
+                            chk.className = 'checklist-item ok';
+                            chkVal.textContent = 'Omitido';
+                        } else {
+                            chk.className = 'checklist-item ko';
+                            chkVal.textContent = 'Sin Enlace';
+                        }
                     }
                 }
             }

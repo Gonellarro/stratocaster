@@ -133,3 +133,11 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
 * **Limpieza de app.py:** Reducido `app.py` de más de 1900 líneas a solo 160 líneas de pura lógica de Flask, mejorando drásticamente el mantenimiento.
 * **Actualización de Dockerfile:** Modificado para copiar toda la estructura del directorio (`COPY . .`) y no solo el script python, garantizando que el contenedor tenga acceso a las vistas estáticas.
 
+## 5. Optimización del GPS, Control de Timeouts y Simplificación de Inferencia
+* **Suscripción Pasiva del GPS:** Implementada una escucha pasiva (`termux-location -r updates`) en segundo plano que escribe las coordenadas de forma continua en `gps_updates.json`. Las consultas posteriores leen el archivo de forma instantánea (`tail -n 1`), eliminando por completo los bloqueos de 15 segundos causados por el encendido y apagado reiterado del chip del GPS.
+* **Control de Timeouts en Voz (TTS):** Envuelta la ejecución de `termux-tts-speak` con `timeout 5` para evitar que el script se bloquee indefinidamente y se acumulen procesos zombis en Termux si el motor de síntesis de voz de Android se congela.
+* **Eliminación de IA Local (llama.cpp) en el Móvil:** Retirada la carga del modelo de IA `Qwen-VL` y el comando `llama-mtmd-cli` del script `sonda_loop.sh`. Al delegar el procesamiento pesado fuera del teléfono, el uso de memoria RAM del script ha bajado de más de 2.5 GB a unos pocos megabytes, solucionando de raíz las terminaciones forzadas del sistema operativo (`Signal 9`).
+* **Habilitación de Cuenta Atrás:** Modificada la validación `isReady` de la consola de control para omitir los checks puenteados de LoRa y vídeo, permitiendo que el botón "Iniciar cuenta atrás" se active correctamente en cuanto los componentes del móvil pasen a color verde.
+* **Auto-centrado del Mapa:** Añadido un detector en el cliente web que centra y desplaza el mapa automáticamente (`setView`) en la posición de la sonda en cuanto se recibe el primer paquete geográfico válido.
+
+

@@ -180,6 +180,17 @@ function handleSondaDiagnostics(data) {
 
     // Mini-cards
     document.getElementById('mini-bat').textContent = data.level + '%';
+    const batBar = document.getElementById('mini-bat-bar');
+    if (batBar) {
+        batBar.style.width = data.level + '%';
+        if (data.level < 50) {
+            batBar.style.backgroundColor = 'var(--red-accent)';
+        } else if (data.level < 75) {
+            batBar.style.backgroundColor = 'var(--yellow-accent)';
+        } else {
+            batBar.style.backgroundColor = 'var(--green-accent)';
+        }
+    }
     document.getElementById('mini-temp').textContent = data.temp + '°C';
     document.getElementById('mini-gps').textContent = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null") ? 'Acc: ' + data.accuracy + 'm' : 'Fijo (Sin Prec.)';
 
@@ -622,6 +633,7 @@ function updateLinkState(linkId, connected) {
 
 function updateGeneralStatusLarge() {
     const large = document.getElementById('sys-status-large');
+    if (!large) return;
     
     let disconnectedCount = 0;
     if (!checks.movil) disconnectedCount++;
@@ -629,13 +641,13 @@ function updateGeneralStatusLarge() {
     
     if (disconnectedCount === 0) {
         large.textContent = 'OK';
-        large.className = 'status-large status-ok';
+        large.className = 'header-pill';
     } else if (disconnectedCount === 1) {
         large.textContent = 'WARN';
-        large.className = 'status-large status-warn';
+        large.className = 'header-pill warn';
     } else {
         large.textContent = 'ALERTA';
-        large.className = 'status-large status-alarm';
+        large.className = 'header-pill alarm';
     }
 }
 

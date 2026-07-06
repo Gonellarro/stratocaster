@@ -13,38 +13,65 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/control.css') }}" />
 </head>
 <body>
-    <!-- 1. Left Sidebar -->
-    <div class="sidebar">
-        <div>
-            <div class="sidebar-logo">
-                <div class="sidebar-logo-icon">🎈</div>
-                <div class="sidebar-title">
-                    <h2>Sonda Meteorológica</h2>
-                    <p>Dashboard de Control</p>
-                </div>
+    <!-- Top Navigation Bar -->
+    <div class="top-bar">
+        <div class="brand">
+            <span class="brand-logo-icon">🎈</span>
+            <div class="brand-title">
+                <h1>SONDA METEOROLÓGICA</h1>
+                <p>Dashboard de Control</p>
             </div>
-            <ul class="menu-list">
-                <li class="menu-item active"><a href="#">📊 Dashboard</a></li>
-                <li class="menu-item"><a href="/fotos">🖼️ Galería Fotos</a></li>
-            </ul>
         </div>
-        
-        <div class="active-mission-card">
-            <div class="active-mission-title">Misión Activa</div>
-            <div id="mission-id-card" class="active-mission-id">--</div>
-            <div class="active-mission-detail">
-                <div>Inicio: <span id="mission-start-card">--</span></div>
-                <div>Estado: <span id="mission-state-card">En espera</span></div>
+
+        <div class="top-metrics">
+            <div class="top-metric">
+                <span class="top-metric-label">Estado General</span>
+                <span id="sys-status-large" class="header-pill">OK</span>
             </div>
-            <button class="btn-new-mission" onclick="startNewMission()">🆕 NUEVA MISIÓN</button>
+            <div class="top-metric">
+                <span class="top-metric-label">Sesión Activa</span>
+                <span id="mission-id-card" class="top-metric-value" style="color: var(--cyan-accent);">--</span>
+            </div>
+            <div class="top-metric">
+                <span class="top-metric-label">Tiempo de Misión</span>
+                <span id="mission-time" class="top-metric-value" style="font-family: monospace;">00:00:00</span>
+            </div>
+            <div class="top-metric">
+                <span class="top-metric-label">Satélites GPS</span>
+                <span id="header-gps-sats" class="top-metric-value" style="color: var(--cyan-accent);">0</span>
+            </div>
         </div>
     </div>
 
-    <!-- 2. Main Workspace -->
-    <div class="main-content">
-        <!-- Header con Barra de Fases y Estado General -->
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1.5rem; margin-bottom: 2rem;">
-            <div class="phase-bar" style="flex-grow: 1; margin-bottom: 0;">
+    <!-- Main Layout Wrapper -->
+    <div class="layout-wrapper">
+        <!-- 1. Left Sidebar -->
+        <div class="sidebar">
+            <ul class="menu-list">
+                <li class="menu-item active"><a href="#">📊 Dashboard</a></li>
+                <li class="menu-item"><a href="#">📋 Misión</a></li>
+                <li class="menu-item"><a href="#">⚡ Telemetría</a></li>
+                <li class="menu-item"><a href="#">📍 Mapa</a></li>
+                <li class="menu-item"><a href="#">📸 Cámara</a></li>
+                <li class="menu-item"><a href="#">📻 Meshtastic</a></li>
+                <li class="menu-item"><a href="#">📄 Registros</a></li>
+                <li class="menu-item"><a href="#">⚙️ Configuración</a></li>
+            </ul>
+            
+            <div class="active-mission-card">
+                <div class="active-mission-title">Misión Activa</div>
+                <div class="active-mission-detail">
+                    <div>Inicio: <span id="mission-start-card">--</span></div>
+                    <div>Estado: <span id="mission-state-card">En espera</span></div>
+                </div>
+                <button class="btn-new-mission" onclick="startNewMission()">NUEVA MISIÓN</button>
+            </div>
+        </div>
+
+        <!-- 2. Main Workspace -->
+        <div class="content-workspace">
+            <!-- Phase Progress Bar -->
+            <div class="phase-bar">
                 <div id="phase-1" class="phase-card active">
                     <div class="phase-icon">📋</div>
                     <div>
@@ -66,7 +93,7 @@
                     <div>
                         <div class="phase-num">Fase 3</div>
                         <div class="phase-title">EN VUELO</div>
-                        <div class="phase-subtitle">Telemetría e IA</div>
+                        <div class="phase-subtitle">Telemetría</div>
                     </div>
                 </div>
                 <div id="phase-4" class="phase-card">
@@ -79,293 +106,245 @@
                 </div>
             </div>
 
-            <div class="panel" style="width: 250px; padding: 1rem; text-align: center; display: flex; flex-direction: row; align-items: center; gap: 1rem; height: 75px;">
-                <div style="flex-grow: 1; text-align: left;">
-                    <div style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; font-weight: bold;">Tiempo de Misión</div>
-                    <div id="mission-time" style="font-size: 1.4rem; font-weight: 700; font-family: monospace;">00:00:00</div>
-                </div>
-                <div style="border-left: 1px solid var(--card-border); height: 100%; padding-left: 1rem; text-align: right;">
-                    <div style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; font-weight: bold;">Satélites</div>
-                    <div id="header-gps-sats" style="font-size: 1.4rem; font-weight: 700; color: var(--cyan-accent);">0</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Pre-Flight Panel Row -->
-        <div class="top-cards-grid">
-            <!-- Card 1: Checklist de sistemas -->
-            <div class="panel">
-                <div class="panel-title">Check de sistemas</div>
-                <div class="checklist-list">
-                    <div id="chk-movil" class="checklist-item">
-                        <div class="checklist-status"></div>
-                        <div class="checklist-label">Móvil (Android)</div>
-                        <div id="chk-movil-val" class="checklist-val">--</div>
-                    </div>
-                    <div id="chk-lora" class="checklist-item ok">
-                        <div class="checklist-status"></div>
-                        <div class="checklist-label">ESP32 LoRa (Telemetría)</div>
-                        <div id="chk-lora-val" class="checklist-val">Omitido</div>
-                    </div>
-                    <div id="chk-meshtastic" class="checklist-item ok">
-                        <div class="checklist-status"></div>
-                        <div class="checklist-label">ESP32 LoRa (Meshtastic)</div>
-                        <div id="chk-meshtastic-val" class="checklist-val">Omitido</div>
-                    </div>
-                    <div id="chk-gps" class="checklist-item">
-                        <div class="checklist-status"></div>
-                        <div class="checklist-label">GPS Sonda (Precisión)</div>
-                        <div id="chk-gps-val" class="checklist-val">Sin Enlace</div>
-                    </div>
-                    <div id="chk-battery" class="checklist-item">
-                        <div class="checklist-status"></div>
-                        <div class="checklist-label">Batería Móvil (>50%)</div>
-                        <div id="chk-battery-val" class="checklist-val">--</div>
-                    </div>
-                    <div id="chk-sensors" class="checklist-item">
-                        <div class="checklist-status"></div>
-                        <div class="checklist-label">Sensores Térmicos</div>
-                        <div id="chk-sensors-val" class="checklist-val">--</div>
-                    </div>
-                    <div id="chk-audio" class="checklist-item">
-                        <div class="checklist-status"></div>
-                        <div class="checklist-label">Altavoz (TTS)</div>
-                        <div id="chk-audio-val" class="checklist-val">Pendiente</div>
-                    </div>
-                    <div id="chk-foto" class="checklist-item">
-                        <div class="checklist-status"></div>
-                        <div class="checklist-label">Cámara (Foto e IA)</div>
-                        <div id="chk-foto-val" class="checklist-val">Pendiente</div>
-                    </div>
-                </div>
-                <button id="btn-test-systems" class="btn btn-accent" style="width: 100%; margin-top: auto;" onclick="runSelfTest()">🤖 PROBAR SISTEMAS</button>
-            </div>
-
-            <!-- Card 2: Cuenta atrás -->
-            <div class="panel">
-                <div class="panel-title">Listo para el despegue</div>
-                <div class="countdown-area">
-                    <div id="countdown-clock" class="countdown-value">00:00:10</div>
-                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; text-transform: uppercase;">Cuenta atrás de ignición</div>
-                </div>
-                <button id="btn-arm" class="btn btn-accent btn-red" style="width: 100%;" onclick="armLaunch()" disabled>🚀 INICIAR CUENTA ATRÁS</button>
-            </div>
-
-            <!-- Card 3: Estado General -->
-            <div class="panel">
-                <div class="panel-title">Estado General</div>
-                <div>
-                    <div id="sys-status-large" class="status-large status-ok">OK</div>
-                </div>
-                <div class="status-subtext">
-                    <div><span>Señal LoRa:</span> <span id="sys-lora-signal">-- dBm</span></div>
-                    <div><span>Satélites GPS:</span> <span id="sys-gps-sats">--</span></div>
-                    <div><span>Último Ping:</span> <span id="sys-last-ping">--</span></div>
-                </div>
-            </div>
-
-            <!-- Card 4: Enlaces -->
-            <div class="panel">
-                <div class="panel-title">Enlaces</div>
-                <div class="links-list">
-                    <div class="link-row">
-                        <span>Sonda Móvil (4G)</span>
-                        <span id="link-movil" class="link-badge disconnected">Desconectado</span>
-                    </div>
-                    <div class="link-row">
-                        <span>ESP32 LoRa (Telemetría)</span>
-                        <span id="link-lora" class="link-badge disconnected">Desconectado</span>
-                    </div>
-                    <div class="link-row">
-                        <span>ESP32 LoRa (Meshtastic)</span>
-                        <span id="link-meshtastic" class="link-badge disconnected">Desconectado</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Row 2: In-Flight Real-Time Display (Telemetry Table, Camera Feed, Map) -->
-        <div class="flight-grid">
-            <!-- Card 1: Telemetría en tiempo real comparativa y mini-cards -->
-            <div class="panel" style="justify-content: flex-start; gap: 1rem;">
-                <div class="panel-title">Telemetría en tiempo real</div>
-                <div class="telem-table-container">
-                    <table class="telem-table">
-                        <thead>
-                            <tr>
-                                <th>Sensor</th>
-                                <th>📱 Sonda (Móvil)</th>
-                                <th>📻 Sonda (LoRa)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td><span class="telem-icon">🛰️</span> Satélites</td>
-                                <td id="td-m-sats">--</td>
-                                <td id="td-l-sats">--</td>
-                            </tr>
-                            <tr>
-                                <td><span class="telem-icon">⛰️</span> Altitud</td>
-                                <td id="td-m-alt">--</td>
-                                <td id="td-l-alt">--</td>
-                            </tr>
-                            <tr>
-                                <td><span class="telem-icon">📍</span> Latitud</td>
-                                <td id="td-m-lat">--</td>
-                                <td id="td-l-lat">--</td>
-                            </tr>
-                            <tr>
-                                <td><span class="telem-icon">📍</span> Longitud</td>
-                                <td id="td-m-lng">--</td>
-                                <td id="td-l-lng">--</td>
-                            </tr>
-                            <tr>
-                                <td><span class="telem-icon">⚡</span> Velocidad</td>
-                                <td id="td-m-spd">--</td>
-                                <td id="td-l-spd">--</td>
-                            </tr>
-                            <tr>
-                                <td><span class="telem-icon">🧭</span> Rumbo</td>
-                                <td id="td-m-crs">--</td>
-                                <td id="td-l-crs">--</td>
-                            </tr>
-                            <tr>
-                                <td><span class="telem-icon">🔋</span> Batería / Temp.</td>
-                                <td id="td-m-bat">--</td>
-                                <td id="td-l-bat">--</td>
-                            </tr>
-                        </tbody>
-                    </table>
-
-                    <div class="telemetry-mini-grid">
-                        <div class="telem-mini-card">
-                            <div class="telem-mini-label">Altitud (Mejor)</div>
-                            <div id="mini-alt" class="telem-mini-value">-- m</div>
+            <!-- Top Row Grid: System Checklist & Countdown -->
+            <div class="top-row-grid">
+                <!-- Checklist de sistemas (comprimido) -->
+                <div class="panel">
+                    <div class="panel-title">Check de sistemas</div>
+                    <div class="checklist-list">
+                        <div id="chk-movil" class="checklist-item">
+                            <div class="checklist-status"></div>
+                            <span class="checklist-label">Móvil (Android)</span>
+                            <span id="chk-movil-val" class="checklist-val">--</span>
                         </div>
-                        <div class="telem-mini-card">
-                            <div class="telem-mini-label">Velocidad</div>
-                            <div id="mini-spd" class="telem-mini-value">-- km/h</div>
+                        <div id="chk-lora" class="checklist-item ok">
+                            <div class="checklist-status"></div>
+                            <span class="checklist-label">LoRa Telemetría</span>
+                            <span id="chk-lora-val" class="checklist-val">Omitido</span>
                         </div>
-                        <div class="telem-mini-card">
-                            <div class="telem-mini-label">Rumbo</div>
-                            <div id="mini-crs" class="telem-mini-value">--</div>
+                        <div id="chk-meshtastic" class="checklist-item ok">
+                            <div class="checklist-status"></div>
+                            <span class="checklist-label">LoRa Meshtastic</span>
+                            <span id="chk-meshtastic-val" class="checklist-val">Omitido</span>
                         </div>
-                        <div class="telem-mini-card">
-                            <div class="telem-mini-label">Temperatura</div>
-                            <div id="mini-temp" class="telem-mini-value">-- °C</div>
+                        <div id="chk-gps" class="checklist-item">
+                            <div class="checklist-status"></div>
+                            <span class="checklist-label">GPS Sonda</span>
+                            <span id="chk-gps-val" class="checklist-val">Sin Enlace</span>
                         </div>
-                        <div class="telem-mini-card">
-                            <div class="telem-mini-label">Batería</div>
-                            <div id="mini-bat" class="telem-mini-value">--%</div>
+                        <div id="chk-battery" class="checklist-item">
+                            <div class="checklist-status"></div>
+                            <span class="checklist-label">Batería (>50%)</span>
+                            <span id="chk-battery-val" class="checklist-val">--</span>
                         </div>
-                        <div class="telem-mini-card">
-                            <div class="telem-mini-label">GPS Prec.</div>
-                            <div id="mini-gps" class="telem-mini-value">--</div>
+                        <div id="chk-sensors" class="checklist-item">
+                            <div class="checklist-status"></div>
+                            <span class="checklist-label">Sens. Térmicos</span>
+                            <span id="chk-sensors-val" class="checklist-val">--</span>
+                        </div>
+                        <div id="chk-audio" class="checklist-item">
+                            <div class="checklist-status"></div>
+                            <span class="checklist-label">Altavoz (TTS)</span>
+                            <span id="chk-audio-val" class="checklist-val">Pendiente</span>
+                        </div>
+                        <div id="chk-foto" class="checklist-item">
+                            <div class="checklist-status"></div>
+                            <span class="checklist-label">Cámara (Foto)</span>
+                            <span id="chk-foto-val" class="checklist-val">Pendiente</span>
+                        </div>
+                    </div>
+                    <button id="btn-test-systems" class="btn" style="width: 100%; padding: 0.35rem 0.5rem; font-size: 0.75rem;" onclick="runSelfTest()">🤖 PROBAR SISTEMAS</button>
+                </div>
+
+                <!-- Cuenta atrás -->
+                <div class="panel">
+                    <div class="panel-title">Listo para el despegue</div>
+                    <div class="countdown-area">
+                        <div id="countdown-clock" class="countdown-value">00:00:10</div>
+                    </div>
+                    <button id="btn-arm" class="btn btn-red" style="width: 100%;" onclick="armLaunch()" disabled>🚀 INICIAR CUENTA ATRÁS</button>
+                </div>
+
+                <!-- Estado General de rampa -->
+                <div class="panel">
+                    <div class="panel-title">Conectividad</div>
+                    <div class="status-subtext" style="flex-grow: 1; justify-content: center; display: flex; flex-direction: column; gap: 0.5rem;">
+                        <div><span>Señal LoRa:</span> <span id="sys-lora-signal">-- dBm</span></div>
+                        <div><span>Satélites GPS:</span> <span id="sys-gps-sats">--</span></div>
+                        <div><span>Último Ping:</span> <span id="sys-last-ping">--</span></div>
+                    </div>
+                </div>
+
+                <!-- Enlaces -->
+                <div class="panel">
+                    <div class="panel-title">Enlaces</div>
+                    <div class="links-list">
+                        <div class="link-row">
+                            <span>Sonda Móvil (4G)</span>
+                            <span id="link-movil" class="link-badge disconnected">Desconectado</span>
+                        </div>
+                        <div class="link-row">
+                            <span>LoRa (Telemetría)</span>
+                            <span id="link-lora" class="link-badge disconnected">Desconectado</span>
+                        </div>
+                        <div class="link-row">
+                            <span>LoRa (Meshtastic)</span>
+                            <span id="link-meshtastic" class="link-badge disconnected">Desconectado</span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Card 2: Cámara y Vídeo -->
-            <div class="panel">
-                <div class="camera-header">
-                    <span class="panel-title" style="margin-bottom: 0; border: none; padding: 0;">CÁMARA DE VUELO</span>
-                    <div class="camera-tabs">
-                        <button id="tab-foto" class="camera-tab active" onclick="switchCameraTab('foto')">FOTO</button>
-                        <button id="tab-video" class="camera-tab" onclick="switchCameraTab('video')">VÍDEO</button>
+            <!-- Main Dashboard Layout: Two columns -->
+            <div class="main-dashboard-layout">
+                <!-- Left Column -->
+                <div class="left-column">
+                    <!-- Real-Time Telemetry Panels (6 Mini Cards) -->
+                    <div class="panel telem-panel">
+                        <div class="panel-title">Telemetría en tiempo real</div>
+                        <div class="telemetry-grid">
+                            <div class="telem-card">
+                                <span class="telem-label">Altitud</span>
+                                <div id="mini-alt" class="telem-value">-- m</div>
+                                <span class="telem-sub">Mejor opción</span>
+                            </div>
+                            <div class="telem-card">
+                                <span class="telem-label">Posición</span>
+                                <div class="telem-value" style="font-size: 0.75rem; line-height: 1.4; font-family: monospace; margin-top: 0.3rem;">
+                                    Lat: <span id="td-m-lat">--</span><br>
+                                    Lng: <span id="td-m-lng">--</span>
+                                </div>
+                            </div>
+                            <div class="telem-card">
+                                <span class="telem-label">Velocidad</span>
+                                <div id="mini-spd" class="telem-value">-- km/h</div>
+                            </div>
+                            <div class="telem-card">
+                                <span class="telem-label">Rumbo</span>
+                                <div id="mini-crs" class="telem-value">--</div>
+                            </div>
+                            <div class="telem-card">
+                                <span class="telem-label">Temperatura</span>
+                                <div id="mini-temp" class="telem-value">-- °C</div>
+                            </div>
+                            <div class="telem-card">
+                                <span class="telem-label">Batería</span>
+                                <div id="mini-bat" class="telem-value">--%</div>
+                                <div style="background-color: #1e293b; height: 4px; border-radius: 2px; width: 100%; margin-top: 0.25rem; overflow: hidden;">
+                                    <div id="mini-bat-bar" style="background-color: var(--green-accent); height: 100%; width: 0%;"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </div>
-                <div id="camera-frame" class="camera-viewer">
-                    <!-- El stream HLS de MediaMTX o fallback de VDO.ninja -->
-                    <iframe id="video-stream" src="" allow="autoplay; camera; microphone"></iframe>
-                    <!-- Última foto capturada por la IA -->
-                    <img id="photo-feed" src="/images/last" alt="Alimentación de Cámara" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%231a1c23%22/><text x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%2364748b%22 font-family=%22Outfit%22 font-size=%2210%22>Esperando captura...</text></svg>';">
-                </div>
-                <div id="photo-time" class="camera-timestamp">Último evento de cámara: --</div>
-                <div class="camera-actions">
-                    <button class="btn btn-quick" onclick="sendCommand('test_photo')">📸 TOMAR FOTO</button>
-                    <button id="btn-stream-switch" class="btn btn-quick btn-accent" onclick="toggleStreamCmd()">📹 INICIAR VÍDEO</button>
-                </div>
-            </div>
 
-            <!-- Card 3: Mapa interactivo -->
-            <div class="panel" style="justify-content: flex-start; gap: 0.5rem;">
-                <div class="panel-title" style="margin-bottom: 0.5rem;">Posición en Mapa</div>
-                <div class="map-outer">
-                    <div id="map-container"></div>
-                    <div class="map-legend">
-                        <div class="map-legend-item"><span class="legend-dot" style="background: #06b6d4;"></span> Sonda Móvil (4G)</div>
-                        <div class="map-legend-item"><span class="legend-dot" style="background: #ef4444;"></span> Sonda LoRa (Radio)</div>
-                        <div class="map-legend-item"><span class="legend-dot" style="background: #f59e0b;"></span> Meshtastic</div>
+                    <!-- Sub-row: Camera & Meshtastic -->
+                    <div class="sub-row-grid">
+                        <!-- Cámara -->
+                        <div class="panel">
+                            <div class="camera-header">
+                                <span class="panel-title" style="margin-bottom: 0; border: none; padding: 0;">CÁMARA DE VUELO</span>
+                                <div class="camera-tabs">
+                                    <button id="tab-foto" class="camera-tab active" onclick="switchCameraTab('foto')">FOTO</button>
+                                    <button id="tab-video" class="camera-tab" onclick="switchCameraTab('video')">VÍDEO</button>
+                                </div>
+                            </div>
+                            <div id="camera-frame" class="camera-viewer">
+                                <iframe id="video-stream" src="" allow="autoplay; camera; microphone"></iframe>
+                                <img id="photo-feed" src="/images/last" alt="Alimentación de Cámara" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%23080b11%22/><text x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%2364748b%22 font-family=%22Outfit%22 font-size=%228%22>Esperando captura...</text></svg>';">
+                            </div>
+                            <div id="photo-time" class="camera-timestamp">Último evento: --</div>
+                            <div class="camera-actions">
+                                <button class="btn btn-quick" onclick="sendCommand('test_photo')">📸 FOTO</button>
+                                <button id="btn-stream-switch" class="btn btn-quick" style="background-color: var(--cyan-accent); color: #000;" onclick="toggleStreamCmd()">📹 VÍDEO</button>
+                            </div>
+                        </div>
+
+                        <!-- Meshtastic -->
+                        <div class="panel">
+                            <div class="panel-title">Meshtastic (LoRa)</div>
+                            <div class="mesh-list" style="flex-grow: 1; justify-content: center; display: flex; flex-direction: column;">
+                                <div class="mesh-node">
+                                    <span>Sonda principal</span>
+                                    <span id="mesh-node-1" class="mesh-rssi good">-80 dBm</span>
+                                </div>
+                                <div class="mesh-node">
+                                    <span>Nodo Seguimiento 2</span>
+                                    <span id="mesh-node-2" class="mesh-rssi mid">-92 dBm</span>
+                                </div>
+                                <div class="mesh-node">
+                                    <span>Nodo Base 3</span>
+                                    <span id="mesh-node-3" class="mesh-rssi bad">-98 dBm</span>
+                                </div>
+                            </div>
+                            <button class="btn btn-quick" style="margin-top: 0.5rem;" onclick="logMessage('info', 'Meshtastic', 'Abriendo detalles de red mallada...')">VER RED</button>
+                        </div>
+                    </div>
+
+                    <!-- Registro de Eventos -->
+                    <div class="panel log-panel">
+                        <div class="panel-title">Registro de Eventos</div>
+                        <div id="log-display" class="log-console">
+                            <div class="log-line"><span class="time">16:58:10</span> <span class="tag ok">[SISTEMA]</span> Servidor Flask arrancado correctamente en puerto 5000.</div>
+                            <div class="log-line"><span class="time">16:58:11</span> <span class="tag ok">[MQTT]</span> Escuchando topics: sonda/status, sonda/camera, gps/data, sonda/meshtastic.</div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Bottom Row: Meshtastic, Event Log, Quick Actions -->
-        <div class="bottom-grid">
-            <!-- Card Meshtastic nodes -->
-            <div class="panel">
-                <div class="panel-title">Meshtastic (LoRa)</div>
-                <div class="mesh-list">
-                    <div class="mesh-node">
-                        <span>Sonda (Nodo Principal)</span>
-                        <span id="mesh-node-1" class="mesh-rssi good">-80 dBm</span>
+                <!-- Right Column -->
+                <div class="right-column">
+                    <!-- Mapa interactivo -->
+                    <div class="panel map-panel">
+                        <div class="panel-title">Posición en Mapa</div>
+                        <div class="map-outer">
+                            <div id="map-container"></div>
+                            <div class="map-legend">
+                                <div class="map-legend-item"><span class="legend-dot" style="background: #06b6d4;"></span> Sonda Móvil</div>
+                                <div class="map-legend-item"><span class="legend-dot" style="background: #ef4444;"></span> Sonda LoRa</div>
+                                <div class="map-legend-item"><span class="legend-dot" style="background: #f59e0b;"></span> Meshtastic</div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="mesh-node">
-                        <span>Nodo Seguimiento 2</span>
-                        <span id="mesh-node-2" class="mesh-rssi mid">-92 dBm</span>
-                    </div>
-                    <div class="mesh-node">
-                        <span>Nodo Base 3</span>
-                        <span id="mesh-node-3" class="mesh-rssi bad">-98 dBm</span>
-                    </div>
-                </div>
-                <button class="btn btn-quick" style="margin-top: 0.5rem;" onclick="logMessage('info', 'Meshtastic', 'Abriendo detalles de red mallada...')">VER RED COMPLETA</button>
-            </div>
 
-            <!-- Card Registro de eventos -->
-            <div class="panel" style="flex-grow: 1;">
-                <div class="panel-title">Registro de Eventos</div>
-                <div id="log-display" class="log-console">
-                    <div class="log-line"><span class="time">16:58:10</span> <span class="tag ok">[SISTEMA]</span> Servidor Flask arrancado correctamente en puerto 5000.</div>
-                    <div class="log-line"><span class="time">16:58:11</span> <span class="tag ok">[MQTT]</span> Escuchando topics: sonda/status, sonda/camera, gps/data, sonda/meshtastic.</div>
-                </div>
-            </div>
-
-            <!-- Card Acciones rápidas -->
-            <div class="panel">
-                <div class="panel-title">Acciones rápidas</div>
-                <div class="quick-actions-list">
-                    <button class="btn btn-quick btn-outline-red" style="border-color: var(--yellow-accent); color: var(--yellow-accent);" onclick="triggerBuzzer()">🔊 ACTIVAR BALIZA SONORA</button>
-                    <button class="btn btn-quick btn-outline-red" onclick="abortLaunch()">🚨 ABORTAR LANZAMIENTO</button>
-                    <button class="btn btn-quick" onclick="finalizeMission()">🪂 FINALIZAR MISIÓN</button>
+                    <!-- Acciones rápidas -->
+                    <div class="panel">
+                        <div class="panel-title">Acciones rápidas</div>
+                        <div class="quick-actions-list">
+                            <button class="btn btn-quick btn-outline-red" style="border-color: var(--yellow-accent); color: var(--yellow-accent);" onclick="triggerBuzzer()">🔊 BALIZA SONORA</button>
+                            <button class="btn btn-quick btn-outline-red" onclick="abortLaunch()">🚨 ABORTAR LANZAMIENTO</button>
+                            <button class="btn btn-quick" onclick="finalizeMission()">🪂 FINALIZAR MISIÓN</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Modal de Depuración de GPS -->
+    <!-- Elementos ocultos para mantener compatibilidad total con la lógica de control.js sin modificarla -->
+    <div style="display: none;">
+        <span id="td-m-sats"></span>
+        <span id="td-l-sats"></span>
+        <span id="td-m-alt"></span>
+        <span id="td-l-alt"></span>
+        <span id="td-l-lat"></span>
+        <span id="td-l-lng"></span>
+        <span id="td-m-spd"></span>
+        <span id="td-l-spd"></span>
+        <span id="td-m-crs"></span>
+        <span id="td-l-crs"></span>
+        <span id="td-m-bat"></span>
+        <span id="td-l-bat"></span>
+        <span id="mini-gps"></span>
+    </div>
+
+    <!-- Modal de Depuración de GPS (Oculto) -->
     <div id="gps-debug-modal" class="modal" style="display: none; position: fixed; z-index: 10000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(10, 11, 15, 0.9); backdrop-filter: blur(8px); justify-content: center; align-items: center;">
-        <div class="modal-content" style="background-color: #161821; margin: auto; padding: 2rem; border: 1px solid var(--card-border); border-radius: 16px; width: 80%; max-width: 600px; box-shadow: 0 10px 30px var(--accent-glow); position: relative; color: var(--text-color);">
+        <div class="modal-content" style="background-color: #161821; margin: auto; padding: 2rem; border: 1px solid var(--card-border); border-radius: 16px; width: 80%; max-width: 600px; box-shadow: 0 10px 30px var(--cyan-glow); position: relative; color: var(--text-color);">
             <span class="close-modal" onclick="closeGpsModal()" style="position: absolute; right: 1.5rem; top: 1rem; color: var(--text-muted); font-size: 2rem; font-weight: bold; cursor: pointer;">&times;</span>
             <h3 style="color: var(--cyan-accent); margin-bottom: 1rem; border-bottom: 1px solid var(--card-border); padding-bottom: 0.5rem; font-size: 1.3rem;">🛰️ Datos del GPS en Detalle</h3>
-            
-            <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1rem;">
-                Estos son los datos en bruto recibidos directamente de la sonda. Se muestran todos los campos para verificar por qué el parámetro de precisión <strong>(accuracy)</strong> no coincide o no es procesado de forma óptima.
-            </p>
-
             <div style="background-color: rgba(255, 255, 255, 0.03); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
                 <pre id="gps-modal-raw-json" style="font-family: monospace; color: #a5f3fc; font-size: 0.9rem; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word;"></pre>
             </div>
-
-            <div style="display: flex; gap: 1rem; align-items: center; justify-content: space-between;">
-                <div style="font-size: 0.8rem; color: var(--text-muted); max-width: 70%;">
-                    <strong>¿Por qué no hay accuracy?</strong><br>
-                    Si la precisión de satélites no está disponible, Android devuelve <em>null</em> o no incluye la clave <em>accuracy</em> en el payload.
-                </div>
-                <button class="btn btn-accent" onclick="closeGpsModal()" style="padding: 0.5rem 1.5rem;">Cerrar</button>
-            </div>
+            <button class="btn" onclick="closeGpsModal()" style="padding: 0.5rem 1.5rem;">Cerrar</button>
         </div>
     </div>
 

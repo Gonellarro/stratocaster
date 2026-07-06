@@ -140,4 +140,14 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
 * **Habilitación de Cuenta Atrás:** Modificada la validación `isReady` de la consola de control para omitir los checks puenteados de LoRa y vídeo, permitiendo que el botón "Iniciar cuenta atrás" se active correctamente en cuanto los componentes del móvil pasen a color verde.
 * **Auto-centrado del Mapa:** Añadido un detector en el cliente web que centra y desplaza el mapa automáticamente (`setView`) en la posición de la sonda en cuanto se recibe el primer paquete geográfico válido.
 
+## 6. Rediseño Estético y Layout Premium de la Consola
+* **Esquema de Colores Premium:** Adoptada la paleta de colores azul/navy oscuro (`#080b11` y `#0f1322`) con bordes en azul oscuro (`#1a2035`) y acentos en azul cielo y verde, según la imagen de referencia.
+* **Cabecera de Estado Persistente:** Añadido un header superior de ancho completo que unifica el título del proyecto y los indicadores dinámicos (Píldora de estado general, código de misión activa, temporizador y contador de satélites).
+* **Compresión del Checklist:** Se disminuyeron los márgenes, rellenos y el tamaño de fuente en la lista de comprobaciones para evitar desplazamientos verticales en pantallas medianas.
+* **Tarjeta de Telemetría Multipropósito (Mini-Cards):** Se eliminó la antigua tabla comparativa y se reemplazó por 6 tarjetas horizontales independientes. Añadida una barra de nivel de batería dinámica interactiva.
+* **Compatibilidad de Lógica JS:** Mapeados todos los selectores de telemetría históricos en un bloque oculto del HTML, manteniendo compatibilidad total de actualización sin alterar el script cliente.
+* **Estructura Lateral Menú:** Ampliado el menú de la barra izquierda con los accesos directos simulados solicitados (Misión, Telemetría, Mapa, Cámara, Meshtastic, Registros, y Configuración).
+* **Corrección de Warning Falso:** Excluido el enlace de LoRa (puenteado) en el cálculo global del estado general del header, solucionando el falso aviso cuando el móvil está conectado correctamente.
+
+
 

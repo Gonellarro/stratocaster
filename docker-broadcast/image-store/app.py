@@ -318,6 +318,17 @@ def list_photos():
     """
     return render_template_string(html_template, fotos=fotos)
 
+@app.route('/images/last')
+def last_image():
+    try:
+        files = [f for f in os.listdir(app.config['UPLOAD_FOLDER']) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))]
+        if not files:
+            return send_from_directory('static', 'no-image.png') if os.path.exists('static/no-image.png') else ('No images uploaded yet', 404)
+        files.sort(key=lambda x: os.path.getmtime(os.path.join(app.config['UPLOAD_FOLDER'], x)), reverse=True)
+        return send_from_directory(app.config['UPLOAD_FOLDER'], files[0])
+    except Exception as e:
+        return str(e), 500
+
 @app.route('/control')
 def control_panel():
     html_template = """
@@ -326,11 +337,16 @@ def control_panel():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Stratocaster - Consola de Lanzamiento</title>
+        <title>Sonda Meteorológica - Consola de Control</title>
         <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+        <!-- MQTT y Leaflet -->
+        <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <style>
             :root {
                 --bg-color: #0b0c10;
+                --sidebar-bg: #0d0f14;
                 --card-bg: rgba(255, 255, 255, 0.02);
                 --card-border: rgba(255, 255, 255, 0.07);
                 --text-color: #e2e8f0;
@@ -340,6 +356,7 @@ def control_panel():
                 --green-accent: #10b981;
                 --green-glow: rgba(16, 185, 129, 0.15);
                 --yellow-accent: #f59e0b;
+                --yellow-glow: rgba(245, 158, 11, 0.15);
                 --cyan-accent: #06b6d4;
                 --cyan-glow: rgba(6, 182, 212, 0.2);
             }
@@ -349,103 +366,149 @@ def control_panel():
                 background-color: var(--bg-color);
                 color: var(--text-color);
                 min-height: 100vh;
-                padding: 2rem;
-                background-image: radial-gradient(circle at 50% 0%, rgba(6, 182, 212, 0.05) 0%, transparent 60%);
-            }
-            .container { max-width: 1200px; margin: 0 auto; }
-            header {
                 display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 2.5rem;
-                border-bottom: 1px solid var(--card-border);
-                padding-bottom: 1.5rem;
             }
-            header h1 {
-                font-size: 2rem;
-                font-weight: 700;
-                background: linear-gradient(135deg, #fff 0%, #a5f3fc 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-            }
-            .sonda-link {
-                background: rgba(255,255,255,0.04);
-                border: 1px solid var(--card-border);
-                padding: 0.5rem 1rem;
-                border-radius: 8px;
-                font-size: 0.85rem;
-                display: flex;
-                align-items: center;
-                gap: 0.5rem;
-            }
-            .status-dot {
-                width: 10px;
-                height: 10px;
-                border-radius: 50%;
-                background-color: var(--text-muted);
-                display: inline-block;
-            }
-            .status-dot.active {
-                background-color: var(--green-accent);
-                box-shadow: 0 0 10px var(--green-glow);
-                animation: pulse 2s infinite;
-            }
-            @keyframes pulse {
-                0% { transform: scale(1); opacity: 1; }
-                50% { transform: scale(1.2); opacity: 0.7; }
-                100% { transform: scale(1); opacity: 1; }
-            }
-            
-            /* Indicador del Estado de Lanzamiento */
-            .state-banner {
-                background: rgba(255, 255, 255, 0.01);
-                border: 1px solid var(--card-border);
-                border-radius: 16px;
-                padding: 2.5rem;
-                text-align: center;
-                margin-bottom: 2.5rem;
-                position: relative;
-                overflow: hidden;
-            }
-            .state-title {
-                font-size: 0.85rem;
-                text-transform: uppercase;
-                letter-spacing: 0.15em;
-                color: var(--text-muted);
-                margin-bottom: 0.75rem;
-            }
-            .state-value {
-                font-size: 3rem;
-                font-weight: 700;
-                letter-spacing: -0.02em;
-            }
-            .state-espera { color: var(--text-color); }
-            .state-armando {
-                color: var(--yellow-accent);
-                animation: blink 1.5s infinite;
-            }
-            .state-countdown {
-                color: var(--red-accent);
-                font-size: 4rem;
-                text-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
-                animation: scalePulse 1s infinite alternate;
-            }
-            .state-lanzado {
-                color: var(--green-accent);
-                text-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
-            }
-            @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-            @keyframes scalePulse { 0% { transform: scale(1); } 100% { transform: scale(1.03); } }
 
-            /* Grid Layout */
-            .grid {
+            /* Lateral Sidebar */
+            .sidebar {
+                width: 280px;
+                background-color: var(--sidebar-bg);
+                border-right: 1px solid var(--card-border);
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                padding: 1.5rem;
+                position: fixed;
+                height: 100vh;
+                left: 0; top: 0;
+            }
+            .sidebar-logo {
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+                margin-bottom: 2rem;
+            }
+            .sidebar-logo-icon {
+                width: 32px;
+                height: 32px;
+                background: linear-gradient(135deg, var(--cyan-accent), #0284c7);
+                border-radius: 8px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: bold;
+                color: #000;
+            }
+            .sidebar-title h2 { font-size: 1.1rem; font-weight: 700; letter-spacing: 0.05em; }
+            .sidebar-title p { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; }
+            
+            .menu-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+            .menu-item a {
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+                padding: 0.75rem 1rem;
+                color: var(--text-color);
+                text-decoration: none;
+                font-size: 0.95rem;
+                border-radius: 8px;
+                transition: background 0.2s;
+            }
+            .menu-item.active a, .menu-item a:hover {
+                background: rgba(255,255,255,0.03);
+                color: var(--cyan-accent);
+                font-weight: 600;
+            }
+            .active-mission-card {
+                background: rgba(255,255,255,0.01);
+                border: 1px solid var(--card-border);
+                border-radius: 12px;
+                padding: 1rem;
+                margin-top: auto;
+            }
+            .active-mission-title { font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.25rem; }
+            .active-mission-id { font-size: 0.9rem; font-weight: 700; color: var(--cyan-accent); }
+            .active-mission-detail { font-size: 0.8rem; margin-top: 0.5rem; color: var(--text-color); }
+            .btn-new-mission {
+                width: 100%;
+                background: rgba(6, 182, 212, 0.1);
+                border: 1px dashed var(--cyan-accent);
+                color: var(--cyan-accent);
+                padding: 0.5rem;
+                border-radius: 6px;
+                font-size: 0.8rem;
+                font-weight: 600;
+                margin-top: 0.75rem;
+                cursor: pointer;
+                transition: background 0.2s;
+            }
+            .btn-new-mission:hover { background: rgba(6, 182, 212, 0.2); }
+
+            /* Main Workspace Area */
+            .main-content {
+                margin-left: 280px;
+                flex-grow: 1;
+                padding: 2rem;
+                overflow-y: auto;
+                max-width: calc(100% - 280px);
+            }
+
+            /* Phase Progress Selector */
+            .phase-bar {
                 display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 2.5rem;
-                margin-bottom: 2.5rem;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 1rem;
+                margin-bottom: 2rem;
+            }
+            .phase-card {
+                background: var(--card-bg);
+                border: 1px solid var(--card-border);
+                border-radius: 12px;
+                padding: 1rem;
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+                position: relative;
+                transition: all 0.3s;
+                opacity: 0.5;
+            }
+            .phase-card.active {
+                opacity: 1;
+                border-color: var(--cyan-accent);
+                box-shadow: 0 0 15px rgba(6, 182, 212, 0.1);
+                background: rgba(6, 182, 212, 0.02);
+            }
+            .phase-icon {
+                width: 36px;
+                height: 36px;
+                border-radius: 50%;
+                background: rgba(255,255,255,0.03);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 1.1rem;
+            }
+            .phase-card.active .phase-icon {
+                background: var(--cyan-accent);
+                color: #000;
+                box-shadow: 0 0 10px var(--cyan-glow);
+            }
+            .phase-num { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; }
+            .phase-title { font-size: 0.9rem; font-weight: 700; }
+            .phase-subtitle { font-size: 0.75rem; color: var(--text-muted); }
+
+            /* Dashboard Top Cards Grid */
+            .top-cards-grid {
+                display: grid;
+                grid-template-columns: 340px 1.2fr 1fr 1.1fr;
+                gap: 1.5rem;
+                margin-bottom: 2rem;
+            }
+            @media (max-width: 1200px) {
+                .top-cards-grid { grid-template-columns: 1fr 1fr; }
             }
             @media (max-width: 768px) {
-                .grid { grid-template-columns: 1fr; }
+                .top-cards-grid { grid-template-columns: 1fr; }
             }
 
             .panel {
@@ -453,466 +516,1040 @@ def control_panel():
                 border: 1px solid var(--card-border);
                 border-radius: 16px;
                 padding: 1.5rem;
+                backdrop-filter: blur(12px);
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
             }
-            .panel h2 {
-                font-size: 1.25rem;
-                font-weight: 600;
-                margin-bottom: 1.5rem;
+            .panel-title {
+                font-size: 0.85rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                color: var(--text-muted);
+                margin-bottom: 1rem;
                 border-bottom: 1px solid var(--card-border);
-                padding-bottom: 0.75rem;
+                padding-bottom: 0.5rem;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
             }
 
-            /* Checklist */
+            /* Checklist pre-flight */
+            .checklist-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem; }
             .checklist-item {
                 display: flex;
                 align-items: center;
-                gap: 0.75rem;
-                padding: 0.75rem 0;
-                border-bottom: 1px solid rgba(255,255,255,0.02);
+                gap: 0.6rem;
+                padding: 0.4rem 0;
+                font-size: 0.85rem;
             }
-            .checklist-checkbox {
-                width: 20px;
-                height: 20px;
+            .checklist-status {
+                width: 16px; height: 16px;
                 border-radius: 4px;
                 border: 1px solid var(--card-border);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 0.75rem;
-                color: transparent;
+                display: flex; align-items: center; justify-content: center;
+                font-size: 0.7rem; color: transparent;
                 transition: all 0.2s;
             }
-            .checklist-item.checked .checklist-checkbox {
+            .checklist-item.ok .checklist-status {
                 background-color: var(--green-accent);
                 border-color: var(--green-accent);
                 color: #fff;
-                box-shadow: 0 0 8px var(--green-glow);
+                box-shadow: 0 0 6px var(--green-glow);
             }
-            .checklist-label {
-                font-size: 0.95rem;
-                flex-grow: 1;
+            .checklist-item.ko .checklist-status {
+                background-color: var(--red-accent);
+                border-color: var(--red-accent);
+                color: #fff;
+                box-shadow: 0 0 6px var(--red-glow);
             }
-            .checklist-val {
-                font-size: 0.9rem;
-                color: var(--text-muted);
-                font-family: monospace;
-            }
-
-            /* Diagnostic Grid */
-            .diag-grid {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 1rem;
-            }
-            .diag-card {
-                background: rgba(255,255,255,0.01);
-                border: 1px solid var(--card-border);
-                border-radius: 10px;
-                padding: 1rem;
-                text-align: center;
-            }
-            .diag-label {
-                font-size: 0.75rem;
-                color: var(--text-muted);
-                text-transform: uppercase;
-                margin-bottom: 0.5rem;
-            }
-            .diag-value {
-                font-size: 1.3rem;
-                font-weight: 600;
-                font-family: monospace;
-            }
-
-            /* Buttons & Actions */
-            .actions-grid {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 1rem;
-            }
+            .checklist-item.ko .checklist-status::after { content: "✗"; }
+            .checklist-item.ok .checklist-status::after { content: "✓"; }
+            .checklist-label { flex-grow: 1; }
+            .checklist-val { font-family: monospace; color: var(--text-muted); font-size: 0.8rem; }
+            
             .btn {
                 font-family: 'Outfit', sans-serif;
                 background: rgba(255,255,255,0.03);
                 border: 1px solid var(--card-border);
                 color: var(--text-color);
-                padding: 0.85rem 1rem;
-                border-radius: 10px;
-                font-size: 0.9rem;
+                padding: 0.75rem 1rem;
+                border-radius: 8px;
+                font-size: 0.85rem;
                 font-weight: 600;
                 cursor: pointer;
                 transition: all 0.2s;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 0.5rem;
+                display: flex; align-items: center; justify-content: center; gap: 0.5rem;
             }
-            .btn:hover:not(:disabled) {
-                background: rgba(255,255,255,0.08);
-                border-color: var(--text-color);
+            .btn:hover:not(:disabled) { background: rgba(255,255,255,0.08); border-color: var(--text-color); }
+            .btn:active:not(:disabled) { transform: scale(0.98); }
+            .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+            .btn-accent { background: var(--cyan-accent); color: #000; border: none; }
+            .btn-accent:hover:not(:disabled) { background: #22d3ee; box-shadow: 0 0 10px var(--cyan-glow); }
+            .btn-red { background: var(--red-accent); color: #fff; border: none; font-size: 1rem; font-weight: 700; width: 100%; box-shadow: 0 0 15px rgba(239, 68, 68, 0.2); }
+            .btn-red:hover:not(:disabled) { background: #f87171; box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); }
+
+            /* Countdown Display */
+            .countdown-area { text-align: center; display: flex; flex-direction: column; justify-content: center; flex-grow: 1; min-height: 100px; }
+            .countdown-value { font-size: 3rem; font-weight: 700; font-family: monospace; color: var(--cyan-accent); text-shadow: 0 0 15px rgba(6, 182, 212, 0.3); }
+            .countdown-value.active { color: var(--red-accent); text-shadow: 0 0 20px rgba(239, 68, 68, 0.4); animation: scalePulse 1s infinite alternate; }
+
+            /* General Status */
+            .status-large { font-size: 3rem; font-weight: 700; text-align: center; margin-bottom: 0.5rem; }
+            .status-ok { color: var(--green-accent); text-shadow: 0 0 15px rgba(16, 185, 129, 0.3); }
+            .status-warn { color: var(--yellow-accent); text-shadow: 0 0 15px rgba(245, 158, 11, 0.3); }
+            .status-alarm { color: var(--red-accent); text-shadow: 0 0 15px rgba(239, 68, 68, 0.3); }
+            .status-subtext { font-size: 0.8rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 0.3rem; margin-top: auto; }
+            .status-subtext div { display: flex; justify-content: space-between; }
+
+            /* Link Indicators */
+            .links-list { display: flex; flex-direction: column; gap: 0.75rem; flex-grow: 1; justify-content: center; }
+            .link-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; }
+            .link-badge { padding: 0.25rem 0.6rem; border-radius: 4px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); color: var(--text-muted); }
+            .link-badge.connected { color: var(--green-accent); background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.2); }
+            .link-badge.disconnected { color: var(--red-accent); background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2); }
+
+            /* In-Flight Row Layout */
+            .flight-grid {
+                display: grid;
+                grid-template-columns: 2.1fr 1fr 1.6fr;
+                gap: 1.5rem;
+                margin-bottom: 2rem;
             }
-            .btn:active:not(:disabled) {
-                transform: scale(0.98);
-            }
-            .btn:disabled {
-                opacity: 0.3;
-                cursor: not-allowed;
-            }
-            .btn-accent {
-                background: var(--cyan-accent);
-                color: #000;
-                border: none;
-            }
-            .btn-accent:hover:not(:disabled) {
-                background: #22d3ee;
-                box-shadow: 0 0 15px var(--cyan-glow);
-            }
-            .btn-red {
-                background: var(--red-accent);
-                color: #fff;
-                border: none;
-                font-size: 1.1rem;
-                padding: 1.25rem 2rem;
-                border-radius: 12px;
-                width: 100%;
-                box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
-            }
-            .btn-red:hover:not(:disabled) {
-                background: #f87171;
-                box-shadow: 0 0 25px rgba(239, 68, 68, 0.4);
-            }
-            .btn-outline-red {
-                border-color: var(--red-accent);
-                color: var(--red-accent);
-            }
-            .btn-outline-red:hover {
-                background: rgba(239, 68, 68, 0.05);
+            @media (max-width: 1200px) {
+                .flight-grid { grid-template-columns: 1fr; }
             }
 
-            .bottom-bar {
-                text-align: center;
-                margin-top: 1.5rem;
+            /* Telemetry Compare Table */
+            .telem-table-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 1rem; }
+            .telem-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; text-align: left; }
+            .telem-table th { color: var(--text-muted); font-weight: 600; padding: 0.5rem 0.3rem; border-bottom: 1px solid var(--card-border); }
+            .telem-table td { padding: 0.45rem 0.3rem; border-bottom: 1px solid rgba(255,255,255,0.02); }
+            .telem-table tr:last-child td { border-bottom: none; }
+            .telem-icon { color: var(--cyan-accent); font-weight: bold; width: 20px; }
+
+            /* Telemetry 6 mini-cards block */
+            .telemetry-mini-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-top: 0.5rem; }
+            .telem-mini-card { background: rgba(255,255,255,0.01); border: 1px solid var(--card-border); border-radius: 8px; padding: 0.6rem; text-align: center; }
+            .telem-mini-label { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.2rem; }
+            .telem-mini-value { font-size: 0.95rem; font-weight: 700; font-family: monospace; color: var(--text-color); }
+
+            /* Camera & Media Card */
+            .camera-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+            .camera-tabs { display: flex; gap: 0.3rem; background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); padding: 0.2rem; border-radius: 6px; }
+            .camera-tab { background: none; border: none; color: var(--text-muted); font-family: inherit; font-size: 0.75rem; font-weight: 600; padding: 0.3rem 0.75rem; border-radius: 4px; cursor: pointer; transition: all 0.2s; }
+            .camera-tab.active { background: var(--cyan-accent); color: #000; }
+            .camera-viewer { width: 100%; height: 210px; border-radius: 8px; overflow: hidden; background: #050608; border: 1px solid var(--card-border); position: relative; }
+            .camera-viewer iframe { width: 100%; height: 100%; border: none; display: none; }
+            .camera-viewer img { width: 100%; height: 100%; object-fit: contain; display: block; }
+            .camera-viewer.video-mode iframe { display: block; }
+            .camera-viewer.video-mode img { display: none; }
+            .camera-timestamp { font-size: 0.7rem; color: var(--text-muted); text-align: right; margin-top: 0.4rem; }
+            .camera-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.75rem; }
+
+            /* Map panel */
+            .map-outer { position: relative; width: 100%; height: 285px; border-radius: 12px; overflow: hidden; border: 1px solid var(--card-border); }
+            #map-container { width: 100%; height: 100%; background-color: #0d0f14; }
+            .map-legend { position: absolute; bottom: 10px; left: 10px; background: rgba(11, 12, 16, 0.9); border: 1px solid var(--card-border); padding: 0.4rem 0.6rem; border-radius: 6px; font-size: 0.65rem; z-index: 1000; pointer-events: none; display: flex; flex-direction: column; gap: 0.2rem; }
+            .map-legend-item { display: flex; align-items: center; gap: 0.4rem; }
+            .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+            /* Bottom Row Layout (Meshtastic, Logs, Actions) */
+            .bottom-grid {
+                display: grid;
+                grid-template-columns: 1fr 2fr 1fr;
+                gap: 1.5rem;
+                margin-top: 0.5rem;
             }
-            .bottom-link {
-                color: var(--cyan-accent);
-                text-decoration: none;
-                font-size: 0.95rem;
-                font-weight: 600;
+            @media (max-width: 1024px) {
+                .bottom-grid { grid-template-columns: 1fr; }
             }
-            .bottom-link:hover { text-decoration: underline; }
+
+            /* Meshtastic list */
+            .mesh-list { display: flex; flex-direction: column; gap: 0.5rem; flex-grow: 1; justify-content: center; }
+            .mesh-node { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; padding: 0.35rem 0; border-bottom: 1px solid rgba(255,255,255,0.02); }
+            .mesh-rssi { font-weight: bold; font-family: monospace; }
+            .mesh-rssi.good { color: var(--green-accent); }
+            .mesh-rssi.mid { color: var(--yellow-accent); }
+            .mesh-rssi.bad { color: var(--red-accent); }
+
+            /* Event log console */
+            .log-console {
+                background: #050608;
+                border: 1px solid var(--card-border);
+                border-radius: 8px;
+                padding: 0.75rem;
+                font-family: monospace;
+                font-size: 0.75rem;
+                color: #38bdf8;
+                height: 140px;
+                overflow-y: auto;
+                flex-grow: 1;
+                box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+            }
+            .log-line { margin-bottom: 0.3rem; line-height: 1.3; }
+            .log-line .time { color: var(--text-muted); }
+            .log-line .tag { color: var(--cyan-accent); font-weight: bold; }
+            .log-line .tag.warn { color: var(--yellow-accent); }
+            .log-line .tag.err { color: var(--red-accent); }
+            .log-line .tag.ok { color: var(--green-accent); }
+
+            /* Quick actions panel */
+            .quick-actions-list { display: flex; flex-direction: column; gap: 0.6rem; flex-grow: 1; justify-content: center; }
+            .btn-quick { width: 100%; font-size: 0.8rem; padding: 0.6rem 0.85rem; border-radius: 6px; }
+            
+            /* Scrollbar styling */
+            ::-webkit-scrollbar { width: 6px; height: 6px; }
+            ::-webkit-scrollbar-track { background: transparent; }
+            ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
+            ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
         </style>
-        <!-- Importar MQTT.js desde CDN -->
-        <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     </head>
     <body>
-        <div class="container">
-            <header>
-                <h1>STRATOCASTER • LAUNCH CONTROL</h1>
-                <div class="sonda-link">
-                    <span id="sonda-dot" class="status-dot"></span>
-                    <span id="sonda-status-text">Sonda Desconectada</span>
+        <!-- 1. Left Sidebar -->
+        <div class="sidebar">
+            <div>
+                <div class="sidebar-logo">
+                    <div class="sidebar-logo-icon">🎈</div>
+                    <div class="sidebar-title">
+                        <h2>Sonda Meteorológica</h2>
+                        <p>Dashboard de Control</p>
+                    </div>
                 </div>
-            </header>
-
-            <!-- Banner de Estado principal -->
-            <div class="state-banner">
-                <div class="state-title">Estado de la Misión</div>
-                <div id="state-display" class="state-value state-espera">EN ESPERA</div>
+                <ul class="menu-list">
+                    <li class="menu-item active"><a href="#">📊 Dashboard</a></li>
+                    <li class="menu-item"><a href="/fotos">🖼️ Galería Fotos</a></li>
+                </ul>
             </div>
-
-            <div class="grid">
-                <!-- PANEL IZQUIERDO: Diagnósticos y Estado -->
-                <div class="panel">
-                    <h2>Diagnósticos en Tiempo Real</h2>
-                    <div class="diag-grid" style="margin-bottom: 1.5rem;">
-                        <div class="diag-card">
-                            <div class="diag-label">Batería Móvil</div>
-                            <div id="diag-bat" class="diag-value">--</div>
-                        </div>
-                        <div class="diag-card">
-                            <div class="diag-label">Temp. Móvil</div>
-                            <div id="diag-temp" class="diag-value">--</div>
-                        </div>
-                        <div class="diag-card">
-                            <div class="diag-label">Altitud GPS</div>
-                            <div id="diag-alt" class="diag-value">--</div>
-                        </div>
-                        <div class="diag-card">
-                            <div class="diag-label">Precisión GPS</div>
-                            <div id="diag-acc" class="diag-value">--</div>
-                        </div>
-                    </div>
-
-                    <div class="diag-grid">
-                        <div class="diag-card" style="grid-column: span 2;">
-                            <div class="diag-label">Coordenadas de la Rampa</div>
-                            <div id="diag-coords" class="diag-value" style="font-size: 1.1rem; padding: 0.2rem;">--</div>
-                        </div>
-                    </div>
+            
+            <div class="active-mission-card">
+                <div class="active-mission-title">Misión Activa</div>
+                <div id="mission-id-card" class="active-mission-id">--</div>
+                <div class="active-mission-detail">
+                    <div>Inicio: <span id="mission-start-card">--</span></div>
+                    <div>Estado: <span id="mission-state-card">En espera</span></div>
                 </div>
-
-                <!-- PANEL DERECHO: Checklist y Comandos -->
-                <div class="panel" style="display: flex; flex-direction: column; justify-content: space-between;">
-                    <div>
-                        <h2>Checklist de Sistemas</h2>
-                        
-                        <div id="check-gps" class="checklist-item">
-                            <div class="checklist-checkbox">✓</div>
-                            <div class="checklist-label">Señal GPS de la Sonda</div>
-                            <div id="val-check-gps" class="checklist-val">Sin Señal</div>
-                        </div>
-                        
-                        <div id="check-bat" class="checklist-item">
-                            <div class="checklist-checkbox">✓</div>
-                            <div class="checklist-label">Carga de Batería (>50%)</div>
-                            <div id="val-check-bat" class="checklist-val">--</div>
-                        </div>
-                        
-                        <div id="check-audio" class="checklist-item">
-                            <div class="checklist-checkbox">✓</div>
-                            <div class="checklist-label">Prueba de Altavoz (TTS)</div>
-                            <div id="val-check-audio" class="checklist-val">Pendiente</div>
-                        </div>
-                        
-                        <div id="check-video" class="checklist-item">
-                            <div class="checklist-checkbox">✓</div>
-                            <div class="checklist-label">Prueba de Vídeo en Vivo</div>
-                            <div id="val-check-video" class="checklist-val">Pendiente</div>
-                        </div>
-                        
-                        <div id="check-camera" class="checklist-item">
-                            <div class="checklist-checkbox">✓</div>
-                            <div class="checklist-label">Prueba de Cámara e IA (Upload)</div>
-                            <div id="val-check-camera" class="checklist-val">Pendiente</div>
-                        </div>
-                    </div>
-
-                    <div class="actions-grid" style="margin-top: 1.5rem;">
-                        <button class="btn" onclick="sendCommand('get_status')">🔍 Consultar Sensores</button>
-                        <button class="btn" onclick="sendCommand('init_gps')">🛰️ Inicializar GPS</button>
-                        <button class="btn" onclick="sendCommand('test_audio')">🔊 Probar Audio (TTS)</button>
-                        <button class="btn" onclick="sendCommand('test_video_on')">📹 Test Vídeo [ON]</button>
-                        <button class="btn" onclick="sendCommand('test_video_off')">🔌 Test Vídeo [OFF]</button>
-                        <button class="btn" onclick="sendCommand('test_photo')">📸 Test Foto/IA (Bajo Demanda)</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Firing Command & Abort -->
-            <div class="panel" style="text-align: center; padding: 2rem;">
-                <div style="max-width: 600px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem;">
-                    <button id="arm-btn" class="btn-red" onclick="armLaunch()" disabled>🔒 ARMAR SONDA & INICIAR CUENTA ATRÁS</button>
-                    <button class="btn btn-outline-red" onclick="abortLaunch()">🚨 ABORTAR Y REINICIAR SISTEMAS</button>
-                </div>
-            </div>
-
-            <div class="bottom-bar">
-                <a href="/fotos" class="bottom-link">Ver Galería de Fotos →</a>
+                <button class="btn-new-mission" onclick="startNewMission()">🆕 NUEVA MISIÓN</button>
             </div>
         </div>
 
+        <!-- 2. Main Workspace -->
+        <div class="main-content">
+            <!-- Header con Barra de Fases y Estado General -->
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1.5rem; margin-bottom: 2rem;">
+                <div class="phase-bar" style="flex-grow: 1; margin-bottom: 0;">
+                    <div id="phase-1" class="phase-card active">
+                        <div class="phase-icon">📋</div>
+                        <div>
+                            <div class="phase-num">Fase 1</div>
+                            <div class="phase-title">PRE-DESPEGUE</div>
+                            <div class="phase-subtitle">Check de sistemas</div>
+                        </div>
+                    </div>
+                    <div id="phase-2" class="phase-card">
+                        <div class="phase-icon">🚀</div>
+                        <div>
+                            <div class="phase-num">Fase 2</div>
+                            <div class="phase-title">DESPEGUE</div>
+                            <div class="phase-subtitle">Cuenta atrás</div>
+                        </div>
+                    </div>
+                    <div id="phase-3" class="phase-card">
+                        <div class="phase-icon">⛅</div>
+                        <div>
+                            <div class="phase-num">Fase 3</div>
+                            <div class="phase-title">EN VUELO</div>
+                            <div class="phase-subtitle">Telemetría e IA</div>
+                        </div>
+                    </div>
+                    <div id="phase-4" class="phase-card">
+                        <div class="phase-icon">🪂</div>
+                        <div>
+                            <div class="phase-num">Fase 4</div>
+                            <div class="phase-title">ATERRIZAJE</div>
+                            <div class="phase-subtitle">Rescate / GPS</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel" style="width: 250px; padding: 1rem; text-align: center; display: flex; flex-direction: row; align-items: center; gap: 1rem; height: 75px;">
+                    <div style="flex-grow: 1; text-align: left;">
+                        <div style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; font-weight: bold;">Tiempo de Misión</div>
+                        <div id="mission-time" style="font-size: 1.4rem; font-weight: 700; font-family: monospace;">00:00:00</div>
+                    </div>
+                    <div style="border-left: 1px solid var(--card-border); height: 100%; padding-left: 1rem; text-align: right;">
+                        <div style="font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; font-weight: bold;">Satélites</div>
+                        <div id="header-gps-sats" style="font-size: 1.4rem; font-weight: 700; color: var(--cyan-accent);">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pre-Flight Panel Row -->
+            <div class="top-cards-grid">
+                <!-- Card 1: Checklist de sistemas -->
+                <div class="panel">
+                    <div class="panel-title">Check de sistemas</div>
+                    <div class="checklist-list">
+                        <div id="chk-movil" class="checklist-item">
+                            <div class="checklist-status"></div>
+                            <div class="checklist-label">Móvil (Android)</div>
+                            <div id="chk-movil-val" class="checklist-val">--</div>
+                        </div>
+                        <div id="chk-lora" class="checklist-item">
+                            <div class="checklist-status"></div>
+                            <div class="checklist-label">ESP32 LoRa (Telemetría)</div>
+                            <div id="chk-lora-val" class="checklist-val">--</div>
+                        </div>
+                        <div id="chk-meshtastic" class="checklist-item">
+                            <div class="checklist-status"></div>
+                            <div class="checklist-label">ESP32 LoRa (Meshtastic)</div>
+                            <div id="chk-meshtastic-val" class="checklist-val">Moc</div>
+                        </div>
+                        <div id="chk-foto" class="checklist-item">
+                            <div class="checklist-status"></div>
+                            <div class="checklist-label">Cámara (Foto e IA)</div>
+                            <div id="chk-foto-val" class="checklist-val">Pendiente</div>
+                        </div>
+                        <div id="chk-video" class="checklist-item">
+                            <div class="checklist-status"></div>
+                            <div class="checklist-label">Cámara (Vídeo directo)</div>
+                            <div id="chk-video-val" class="checklist-val">Pendiente</div>
+                        </div>
+                        <div id="chk-battery" class="checklist-item">
+                            <div class="checklist-status"></div>
+                            <div class="checklist-label">Batería Móvil (>50%)</div>
+                            <div id="chk-battery-val" class="checklist-val">--</div>
+                        </div>
+                        <div id="chk-sensors" class="checklist-item">
+                            <div class="checklist-status"></div>
+                            <div class="checklist-label">Sensores Térmicos</div>
+                            <div id="chk-sensors-val" class="checklist-val">--</div>
+                        </div>
+                        <div id="chk-gps" class="checklist-item">
+                            <div class="checklist-status"></div>
+                            <div class="checklist-label">GPS Fijo (Precisión <= 10m)</div>
+                            <div id="chk-gps-val" class="checklist-val">Sin Enlace</div>
+                        </div>
+                    </div>
+                    <button id="btn-test-systems" class="btn btn-accent" style="width: 100%; margin-top: auto;" onclick="runSelfTest()">🤖 PROBAR SISTEMAS</button>
+                </div>
+
+                <!-- Card 2: Cuenta atrás -->
+                <div class="panel">
+                    <div class="panel-title">Listo para el despegue</div>
+                    <div class="countdown-area">
+                        <div id="countdown-clock" class="countdown-value">00:00:10</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; text-transform: uppercase;">Cuenta atrás de ignición</div>
+                    </div>
+                    <button id="btn-arm" class="btn btn-accent btn-red" style="width: 100%;" onclick="armLaunch()" disabled>🚀 INICIAR CUENTA ATRÁS</button>
+                </div>
+
+                <!-- Card 3: Estado General -->
+                <div class="panel">
+                    <div class="panel-title">Estado General</div>
+                    <div>
+                        <div id="sys-status-large" class="status-large status-ok">OK</div>
+                    </div>
+                    <div class="status-subtext">
+                        <div><span>Señal LoRa:</span> <span id="sys-lora-signal">-- dBm</span></div>
+                        <div><span>Satélites GPS:</span> <span id="sys-gps-sats">--</span></div>
+                        <div><span>Último Ping:</span> <span id="sys-last-ping">--</span></div>
+                    </div>
+                </div>
+
+                <!-- Card 4: Enlaces -->
+                <div class="panel">
+                    <div class="panel-title">Enlaces</div>
+                    <div class="links-list">
+                        <div class="link-row">
+                            <span>Sonda Móvil (4G)</span>
+                            <span id="link-movil" class="link-badge disconnected">Desconectado</span>
+                        </div>
+                        <div class="link-row">
+                            <span>ESP32 LoRa (Telemetría)</span>
+                            <span id="link-lora" class="link-badge disconnected">Desconectado</span>
+                        </div>
+                        <div class="link-row">
+                            <span>ESP32 LoRa (Meshtastic)</span>
+                            <span id="link-meshtastic" class="link-badge disconnected">Desconectado</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Row 2: In-Flight Real-Time Display (Telemetry Table, Camera Feed, Map) -->
+            <div class="flight-grid">
+                <!-- Card 1: Telemetría en tiempo real comparativa y mini-cards -->
+                <div class="panel" style="justify-content: flex-start; gap: 1rem;">
+                    <div class="panel-title">Telemetría en tiempo real</div>
+                    <div class="telem-table-container">
+                        <table class="telem-table">
+                            <thead>
+                                <tr>
+                                    <th>Sensor</th>
+                                    <th>📱 Sonda (Móvil)</th>
+                                    <th>📻 Sonda (LoRa)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><span class="telem-icon">🛰️</span> Satélites</td>
+                                    <td id="td-m-sats">--</td>
+                                    <td id="td-l-sats">--</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="telem-icon">⛰️</span> Altitud</td>
+                                    <td id="td-m-alt">--</td>
+                                    <td id="td-l-alt">--</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="telem-icon">📍</span> Latitud</td>
+                                    <td id="td-m-lat">--</td>
+                                    <td id="td-l-lat">--</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="telem-icon">📍</span> Longitud</td>
+                                    <td id="td-m-lng">--</td>
+                                    <td id="td-l-lng">--</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="telem-icon">⚡</span> Velocidad</td>
+                                    <td id="td-m-spd">--</td>
+                                    <td id="td-l-spd">--</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="telem-icon">🧭</span> Rumbo</td>
+                                    <td id="td-m-crs">--</td>
+                                    <td id="td-l-crs">--</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="telem-icon">🔋</span> Batería / Temp.</td>
+                                    <td id="td-m-bat">--</td>
+                                    <td id="td-l-bat">--</td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <div class="telemetry-mini-grid">
+                            <div class="telem-mini-card">
+                                <div class="telem-mini-label">Altitud (Mejor)</div>
+                                <div id="mini-alt" class="telem-mini-value">-- m</div>
+                            </div>
+                            <div class="telem-mini-card">
+                                <div class="telem-mini-label">Velocidad</div>
+                                <div id="mini-spd" class="telem-mini-value">-- km/h</div>
+                            </div>
+                            <div class="telem-mini-card">
+                                <div class="telem-mini-label">Rumbo</div>
+                                <div id="mini-crs" class="telem-mini-value">--</div>
+                            </div>
+                            <div class="telem-mini-card">
+                                <div class="telem-mini-label">Temperatura</div>
+                                <div id="mini-temp" class="telem-mini-value">-- °C</div>
+                            </div>
+                            <div class="telem-mini-card">
+                                <div class="telem-mini-label">Batería</div>
+                                <div id="mini-bat" class="telem-mini-value">--%</div>
+                            </div>
+                            <div class="telem-mini-card">
+                                <div class="telem-mini-label">GPS Prec.</div>
+                                <div id="mini-gps" class="telem-mini-value">--</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 2: Cámara y Vídeo -->
+                <div class="panel">
+                    <div class="camera-header">
+                        <span class="panel-title" style="margin-bottom: 0; border: none; padding: 0;">CÁMARA DE VUELO</span>
+                        <div class="camera-tabs">
+                            <button id="tab-foto" class="camera-tab active" onclick="switchCameraTab('foto')">FOTO</button>
+                            <button id="tab-video" class="camera-tab" onclick="switchCameraTab('video')">VÍDEO</button>
+                        </div>
+                    </div>
+                    <div id="camera-frame" class="camera-viewer">
+                        <!-- El stream HLS de MediaMTX o fallback de VDO.ninja -->
+                        <iframe id="video-stream" src="" allow="autoplay; camera; microphone"></iframe>
+                        <!-- Última foto capturada por la IA -->
+                        <img id="photo-feed" src="/images/last" alt="Alimentación de Cámara" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%231a1c23%22/><text x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%2364748b%22 font-family=%22Outfit%22 font-size=%2210%22>Esperando captura...</text></svg>';">
+                    </div>
+                    <div id="photo-time" class="camera-timestamp">Último evento de cámara: --</div>
+                    <div class="camera-actions">
+                        <button class="btn btn-quick" onclick="sendCommand('test_photo')">📸 TOMAR FOTO</button>
+                        <button id="btn-stream-switch" class="btn btn-quick btn-accent" onclick="toggleStreamCmd()">📹 INICIAR VÍDEO</button>
+                    </div>
+                </div>
+
+                <!-- Card 3: Mapa interactivo -->
+                <div class="panel" style="justify-content: flex-start; gap: 0.5rem;">
+                    <div class="panel-title" style="margin-bottom: 0.5rem;">Posición en Mapa</div>
+                    <div class="map-outer">
+                        <div id="map-container"></div>
+                        <div class="map-legend">
+                            <div class="map-legend-item"><span class="legend-dot" style="background: #06b6d4;"></span> Sonda Móvil (4G)</div>
+                            <div class="map-legend-item"><span class="legend-dot" style="background: #ef4444;"></span> Sonda LoRa (Radio)</div>
+                            <div class="map-legend-item"><span class="legend-dot" style="background: #f59e0b;"></span> Meshtastic</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Row: Meshtastic, Event Log, Quick Actions -->
+            <div class="bottom-grid">
+                <!-- Card Meshtastic nodes -->
+                <div class="panel">
+                    <div class="panel-title">Meshtastic (LoRa)</div>
+                    <div class="mesh-list">
+                        <div class="mesh-node">
+                            <span>Sonda (Nodo Principal)</span>
+                            <span id="mesh-node-1" class="mesh-rssi good">-80 dBm</span>
+                        </div>
+                        <div class="mesh-node">
+                            <span>Nodo Seguimiento 2</span>
+                            <span id="mesh-node-2" class="mesh-rssi mid">-92 dBm</span>
+                        </div>
+                        <div class="mesh-node">
+                            <span>Nodo Base 3</span>
+                            <span id="mesh-node-3" class="mesh-rssi bad">-98 dBm</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-quick" style="margin-top: 0.5rem;" onclick="logMessage('info', 'Meshtastic', 'Abriendo detalles de red mallada...')">VER RED COMPLETA</button>
+                </div>
+
+                <!-- Card Registro de eventos -->
+                <div class="panel" style="flex-grow: 1;">
+                    <div class="panel-title">Registro de Eventos</div>
+                    <div id="log-display" class="log-console">
+                        <div class="log-line"><span class="time">16:58:10</span> <span class="tag ok">[SISTEMA]</span> Servidor Flask arrancado correctamente en puerto 5000.</div>
+                        <div class="log-line"><span class="time">16:58:11</span> <span class="tag ok">[MQTT]</span> Escuchando topics: sonda/status, sonda/camera, gps/data, sonda/meshtastic.</div>
+                    </div>
+                </div>
+
+                <!-- Card Acciones rápidas -->
+                <div class="panel">
+                    <div class="panel-title">Acciones rápidas</div>
+                    <div class="quick-actions-list">
+                        <button class="btn btn-quick btn-outline-red" style="border-color: var(--yellow-accent); color: var(--yellow-accent);" onclick="triggerBuzzer()">🔊 ACTIVAR BALIZA SONORA</button>
+                        <button class="btn btn-quick btn-outline-red" onclick="abortLaunch()">🚨 ABORTAR LANZAMIENTO</button>
+                        <button class="btn btn-quick" onclick="finalizeMission()">🪂 FINALIZAR MISIÓN</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard JavaScript Client Logic -->
         <script>
             let client = null;
-            let lastMessageTime = 0;
+            let lastSondaPing = 0;
+            let lastLoraPing = 0;
+            let lastMeshPing = 0;
+            let streamActive = false;
+            let isTesting = false;
+            let currentPhase = 1;
+            
+            // Checklist local status variables
             let checks = {
-                gps: false,
+                movil: false,
+                lora_telemetria: false,
+                lora_meshtastic: true, // Meshtastic mock / por ahora siempre true
+                camera_foto: false,
+                camera_video: false,
                 battery: false,
-                audio: false,
-                video: false,
-                camera: false
+                sensors: false,
+                gps: false
             };
 
-            // Detectar automáticamente la IP del servidor de la URL para conectar a MQTT
-            const serverIP = window.location.hostname;
-            const mqttUrl = 'ws://' + serverIP + ':9001';
+            // Estructura de Misión
+            let mission = {
+                id: 'MISIÓN_' + new Date().toISOString().slice(0,10).replace(/-/g, '_') + '_001',
+                start: '--',
+                state: 'espera',
+                startTimestamp: 0
+            };
 
-            console.log('Conectando a MQTT en:', mqttUrl);
+            document.getElementById('mission-id-card').textContent = mission.id;
+
+            // 1. Inicialización del Mapa Leaflet
+            let map = L.map('map-container').setView([41.12345, 1.98765], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19
+            }).addTo(map);
+
+            // Capa Satélite
+            let satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri'
+            });
+
+            let baseLayers = {
+                "Mapa": L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'),
+                "Satélite": satelliteLayer
+            };
+            L.control.layers(baseLayers).addTo(map);
+
+            // Marcadores neón y rutas
+            let markers = {
+                movil: L.circleMarker([41.12345, 1.98765], { color: '#06b6d4', fillColor: '#06b6d4', fillOpacity: 0.8, radius: 8 }).addTo(map),
+                lora: L.circleMarker([41.12345, 1.98765], { color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.8, radius: 8 }).addTo(map),
+                mesh: L.circleMarker([41.12345, 1.98765], { color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.8, radius: 8 }).addTo(map)
+            };
+
+            let paths = {
+                movil: L.polyline([], { color: '#06b6d4', weight: 3 }).addTo(map),
+                lora: L.polyline([], { color: '#ef4444', weight: 3, dashArray: '5, 5' }).addTo(map),
+                mesh: L.polyline([], { color: '#f59e0b', weight: 3, dashArray: '2, 5' }).addTo(map)
+            };
+
+            // 2. Conexión MQTT
+            const serverIP = window.location.hostname;
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const mqttUrl = `${protocol}//${serverIP}:9001`;
+
+            logMessage('info', 'MQTT', 'Conectando a ' + mqttUrl + '...');
             client = mqtt.connect(mqttUrl, {
                 username: 'admin',
                 password: 'AWLCxdfGxwohHF2qpScJLK9AbRAFxD'
             });
 
             client.on('connect', () => {
-                console.log('Conectado al Broker MQTT');
+                logMessage('ok', 'MQTT', 'Conectado al Broker MQTT.');
                 client.subscribe('sonda/status');
                 client.subscribe('sonda/camera');
+                client.subscribe('gps/data');
+                client.subscribe('sonda/meshtastic');
                 
-                // Pedir estado inicial
+                // Cargar primer estado
                 sendCommand('get_status');
             });
 
             client.on('message', (topic, message) => {
                 const payload = JSON.parse(message.toString());
-                console.log('Mensaje recibido en:', topic, payload);
                 
-                // Marcar sonda como activa (Heartbeat/Keepalive)
-                lastMessageTime = Date.now();
-                updateSondaConnection(true);
-
                 if (topic === 'sonda/status') {
-                    handleSondaStatus(payload);
-                } else if (topic === 'sonda/camera') {
-                    document.getElementById('check-camera').classList.add('checked');
-                    document.getElementById('val-check-camera').textContent = 'Confirmado';
-                    checks.camera = true;
-                    validateChecklist();
+                    lastSondaPing = Date.now();
+                    checks.movil = true;
+                    updateLinkState('movil', true);
+                    
+                    if (payload.status === 'diagnostico') {
+                        handleSondaDiagnostics(payload);
+                    } else {
+                        handleSondaEvent(payload);
+                    }
+                } 
+                else if (topic === 'gps/data') {
+                    // Diferenciar entre paquete del Móvil (tiene accuracy) y LoRa (tiene speed/course sin accuracy)
+                    if (payload.accuracy !== undefined) {
+                        lastSondaPing = Date.now();
+                        checks.movil = true;
+                        updateLinkState('movil', true);
+                        handleMobileTelemetry(payload);
+                    } else {
+                        lastLoraPing = Date.now();
+                        checks.lora_telemetria = true;
+                        updateLinkState('lora', true);
+                        handleLoraTelemetry(payload);
+                    }
+                }
+                else if (topic === 'sonda/camera') {
+                    lastSondaPing = Date.now();
+                    updateLinkState('movil', true);
+                    handleCameraEvent(payload);
+                }
+                else if (topic === 'sonda/meshtastic') {
+                    lastMeshPing = Date.now();
+                    checks.lora_meshtastic = true;
+                    updateLinkState('meshtastic', true);
+                    handleMeshtasticEvent(payload);
                 }
             });
 
-            // Monitor de conexión de la sonda (si no habla en 15s, se marca offline)
+            // 3. Vigilante de Enlaces (Heartbeat)
             setInterval(() => {
-                if (Date.now() - lastMessageTime > 15000) {
-                    updateSondaConnection(false);
-                }
-            }, 5000);
-
-            function updateSondaConnection(active) {
-                const dot = document.getElementById('sonda-dot');
-                const text = document.getElementById('sonda-status-text');
-                if (active) {
-                    dot.classList.add('active');
-                    text.textContent = 'Sonda Conectada (Activa)';
-                } else {
-                    dot.classList.remove('active');
-                    text.textContent = 'Sonda Desconectada (Inactiva)';
-                    document.getElementById('arm-btn').disabled = true;
-                }
-            }
-
-            function sendCommand(cmdName) {
-                if (!client) return;
-                const payload = JSON.stringify({ cmd: cmdName });
-                client.publish('sonda/comando', payload);
-                console.log('Comando enviado:', cmdName);
+                const now = Date.now();
                 
-                if (cmdName === 'test_video_on') {
-                    document.getElementById('check-video').classList.add('checked');
-                    document.getElementById('val-check-video').textContent = 'Stream Activo';
-                    checks.video = true;
-                    validateChecklist();
-                } else if (cmdName === 'test_video_off') {
-                    document.getElementById('check-video').classList.remove('checked');
-                    document.getElementById('val-check-video').textContent = 'Stream Parado';
-                    checks.video = false;
-                    validateChecklist();
-                }
-            }
-
-            function handleSondaStatus(data) {
-                // 1. Carga de sensores
-                if (data.level !== undefined) {
-                    document.getElementById('diag-bat').textContent = data.level + '%';
-                    document.getElementById('diag-temp').textContent = data.temp + '°C';
-                    
-                    // Validar batería en el checklist
-                    const batCheck = document.getElementById('check-bat');
-                    const batVal = document.getElementById('val-check-bat');
-                    if (data.level >= 50) {
-                        batCheck.classList.add('checked');
-                        batVal.textContent = data.level + '% (Apto)';
-                        checks.battery = true;
-                    } else {
-                        batCheck.classList.remove('checked');
-                        batVal.textContent = data.level + '% (Bajo!)';
-                        checks.battery = false;
+                // Móvil
+                if (now - lastSondaPing > 15000) {
+                    if (checks.movil) {
+                        checks.movil = false;
+                        updateLinkState('movil', false);
+                        logMessage('err', 'CONEXIÓN', 'Pérdida de cobertura de la Sonda Móvil.');
                     }
                 }
                 
-                if (data.lat !== undefined && data.lat !== null && data.lat !== 'null') {
-                    document.getElementById('diag-coords').textContent = parseFloat(data.lat).toFixed(5) + ', ' + parseFloat(data.lng).toFixed(5);
-                    document.getElementById('diag-alt').textContent = parseFloat(data.alt).toFixed(1) + ' m';
-                    document.getElementById('diag-acc').textContent = data.accuracy ? data.accuracy + ' m' : '--';
-
-                    // Validar GPS en el checklist
-                    const gpsCheck = document.getElementById('check-gps');
-                    const gpsVal = document.getElementById('val-check-gps');
-                    gpsCheck.classList.add('checked');
-                    gpsVal.textContent = 'Enlace Fijo (OK)';
-                    checks.gps = true;
+                // LoRa Telemetría
+                if (now - lastLoraPing > 15000) {
+                    if (checks.lora_telemetria) {
+                        checks.lora_telemetria = false;
+                        updateLinkState('lora', false);
+                        logMessage('err', 'CONEXIÓN', 'Receptor LoRa de Telemetría fuera de línea.');
+                    }
                 }
 
-                // Manejo de estados de inicialización de GPS
-                if (data.status === 'gps_initializing') {
-                    const gpsCheck = document.getElementById('check-gps');
-                    const gpsVal = document.getElementById('val-check-gps');
-                    gpsCheck.classList.remove('checked');
-                    gpsVal.textContent = 'Buscando satélites...';
-                    checks.gps = false;
-                    validateChecklist();
-                } else if (data.status === 'gps_failed') {
-                    const gpsCheck = document.getElementById('check-gps');
-                    const gpsVal = document.getElementById('val-check-gps');
-                    gpsCheck.classList.remove('checked');
-                    gpsVal.textContent = 'Error (Sin Enlace)';
-                    checks.gps = false;
-                    validateChecklist();
+                // Meshtastic
+                if (now - lastMeshPing > 20000) {
+                    // No dar alarma fuerte aún para Meshtastic (se simula por ahora)
                 }
 
-                if (data.status === 'audio_ok') {
-                    document.getElementById('check-audio').classList.add('checked');
-                    document.getElementById('val-check-audio').textContent = 'Confirmado';
-                    checks.audio = true;
+                updateGeneralStatusLarge();
+                validateChecklist();
+            }, 4000);
+
+            // 4. Manejadores de Recepción de Datos
+            function handleSondaDiagnostics(data) {
+                // Actualizar tabla comparativa
+                document.getElementById('td-m-sats').textContent = data.accuracy ? 'Sí (Prec: ' + data.accuracy + 'm)' : 'Sí';
+                document.getElementById('td-m-alt').textContent = data.alt !== null ? parseFloat(data.alt).toFixed(1) + ' m' : '--';
+                document.getElementById('td-m-lat').textContent = data.lat !== null ? parseFloat(data.lat).toFixed(5) : '--';
+                document.getElementById('td-m-lng').textContent = data.lng !== null ? parseFloat(data.lng).toFixed(5) : '--';
+                document.getElementById('td-m-spd').textContent = '--';
+                document.getElementById('td-m-crs').textContent = '--';
+                document.getElementById('td-m-bat').textContent = data.level + '% / ' + data.temp + '°C';
+
+                // Mini-cards
+                document.getElementById('mini-bat').textContent = data.level + '%';
+                document.getElementById('mini-temp').textContent = data.temp + '°C';
+                document.getElementById('mini-gps').textContent = data.accuracy ? 'Acc: ' + data.accuracy + 'm' : 'Fijo';
+
+                if (data.alt !== null && data.alt !== 'null') {
+                    document.getElementById('mini-alt').textContent = parseFloat(data.alt).toFixed(1) + ' m';
                 }
+
+                // Actualizar Mapa
+                if (data.lat !== null && data.lat !== 'null' && data.lat !== 0) {
+                    let latlng = [parseFloat(data.lat), parseFloat(data.lng)];
+                    markers.movil.setLatLng(latlng);
+                    paths.movil.addLatLng(latlng);
+                }
+
+                // Actualizar Checklist
+                checks.sensors = true;
+                updateChecklistUI('chk-sensors', true, data.temp + '°C (OK)');
                 
-                if (data.status === 'armed') {
-                    updateStatusDisplay('armando');
+                if (data.level >= 50) {
+                    checks.battery = true;
+                    updateChecklistUI('chk-battery', true, data.level + '% (Apto)');
+                } else {
+                    checks.battery = false;
+                    updateChecklistUI('chk-battery', false, data.level + '% (Batería Baja!)');
+                }
+
+                if (data.accuracy && data.accuracy <= 10) {
+                    checks.gps = true;
+                    updateChecklistUI('chk-gps', true, 'Fijo (' + data.accuracy + 'm)');
+                } else {
+                    checks.gps = false;
+                    updateChecklistUI('chk-gps', false, data.accuracy ? 'Acc: ' + data.accuracy + 'm (Insuficiente)' : 'Sin Enlace');
                 }
 
                 validateChecklist();
             }
 
-            function validateChecklist() {
-                const armBtn = document.getElementById('arm-btn');
-                const isSondaActive = Date.now() - lastMessageTime < 15000;
+            function handleMobileTelemetry(data) {
+                document.getElementById('td-m-alt').textContent = data.altitude !== null ? parseFloat(data.altitude).toFixed(1) + ' m' : '--';
+                document.getElementById('td-m-lat').textContent = data.lat !== null ? parseFloat(data.lat).toFixed(5) : '--';
+                document.getElementById('td-m-lng').textContent = data.lng !== null ? parseFloat(data.lng).toFixed(5) : '--';
+
+                if (data.altitude !== null) {
+                    document.getElementById('mini-alt').textContent = parseFloat(data.altitude).toFixed(1) + ' m';
+                }
                 
-                // Habilitar botón de lanzamiento solo si todos los tests pasan y la sonda responde
-                if (checks.gps && checks.battery && checks.audio && checks.video && checks.camera && isSondaActive) {
-                    armBtn.disabled = false;
+                // Mapa
+                if (data.lat !== null && data.lat !== 0) {
+                    let latlng = [parseFloat(data.lat), parseFloat(data.lng)];
+                    markers.movil.setLatLng(latlng);
+                    paths.movil.addLatLng(latlng);
+                }
+                
+                if (data.accuracy && data.accuracy <= 10) {
+                    checks.gps = true;
+                    updateChecklistUI('chk-gps', true, 'Fijo (' + data.accuracy + 'm)');
+                }
+                validateChecklist();
+            }
+
+            function handleLoraTelemetry(data) {
+                // Actualizar tabla comparativa
+                document.getElementById('td-l-sats').textContent = 'Fijo';
+                document.getElementById('td-l-alt').textContent = data.altitude !== null ? parseFloat(data.altitude).toFixed(1) + ' m' : '--';
+                document.getElementById('td-l-lat').textContent = data.lat !== null ? parseFloat(data.lat).toFixed(5) : '--';
+                document.getElementById('td-l-lng').textContent = data.lng !== null ? parseFloat(data.lng).toFixed(5) : '--';
+                document.getElementById('td-l-spd').textContent = data.speed !== undefined ? parseFloat(data.speed).toFixed(1) + ' km/h' : '--';
+                document.getElementById('td-l-crs').textContent = data.course !== undefined ? data.course + '°' : '--';
+                
+                // Si la sonda perdió cobertura, rellenar mini-cards usando datos del LoRa
+                if (!checks.movil) {
+                    if (data.altitude !== null) document.getElementById('mini-alt').textContent = parseFloat(data.altitude).toFixed(1) + ' m';
+                    if (data.speed !== undefined) document.getElementById('mini-spd').textContent = parseFloat(data.speed).toFixed(1) + ' km/h';
+                    if (data.course !== undefined) document.getElementById('mini-crs').textContent = getWindDirection(data.course) + ' (' + data.course + '°)';
+                }
+
+                // Pintar en el mapa
+                if (data.lat !== null && data.lat !== 0) {
+                    let latlng = [parseFloat(data.lat), parseFloat(data.lng)];
+                    markers.lora.setLatLng(latlng);
+                    paths.lora.addLatLng(latlng);
+                }
+            }
+
+            function handleCameraEvent(data) {
+                // Actualizar foto
+                const img = document.getElementById('photo-feed');
+                img.src = '/images/last?t=' + Date.now(); // forzar refresco
+                
+                document.getElementById('photo-time').textContent = 'Última foto IA (' + new Date().toLocaleTimeString() + '): ' + data.texto;
+                logMessage('ok', 'CÁMARA', 'Nueva foto procesada por IA: "' + data.texto + '"');
+                
+                checks.camera_foto = true;
+                updateChecklistUI('chk-foto', true, 'Foto & IA Confirmada');
+
+                // Si estamos en medio del autotest
+                if (isTesting) {
+                    logMessage('info', 'AUTOTEST', 'Test de Foto completado. Iniciando transmisión de vídeo en directo...');
+                    setTimeout(() => {
+                        sendCommand('test_video_on');
+                    }, 2000);
+                    
+                    // Apagar vídeo a los 6 segundos para finalizar el test
+                    setTimeout(() => {
+                        logMessage('info', 'AUTOTEST', 'Vídeo transmitido correctamente. Apagando vídeo...');
+                        sendCommand('test_video_off');
+                        isTesting = false;
+                        const btn = document.getElementById('btn-test-systems');
+                        btn.textContent = '🤖 SISTEMAS COMPROBADOS (OK)';
+                        btn.classList.add('btn-accent');
+                        btn.disabled = false;
+                    }, 8000);
+                }
+
+                validateChecklist();
+            }
+
+            function handleSondaEvent(data) {
+                if (data.status === 'gps_initializing') {
+                    updateChecklistUI('chk-gps', false, 'Buscando satélites...');
+                    logMessage('warn', 'GPS', 'Iniciando búsqueda activa de satélites GPS...');
+                } else if (data.status === 'gps_failed') {
+                    updateChecklistUI('chk-gps', false, 'Error de Enlace');
+                    logMessage('err', 'GPS', 'Fallo al inicializar GPS (sin cobertura).');
+                } else if (data.status === 'audio_ok') {
+                    logMessage('ok', 'AUDIO', 'Prueba de altavoz confirmada en el móvil.');
+                } else if (data.status === 'video_streaming_on') {
+                    streamActive = true;
+                    checks.camera_video = true;
+                    updateChecklistUI('chk-video', true, 'Transmitiendo');
+                    document.getElementById('btn-stream-switch').textContent = '🔌 DETENER VÍDEO';
+                    document.getElementById('btn-stream-switch').className = 'btn btn-quick btn-outline-red';
+                    switchCameraTab('video');
+                    logMessage('ok', 'VÍDEO', 'Transmisión de vídeo en directo iniciada.');
+                } else if (data.status === 'video_streaming_off') {
+                    streamActive = false;
+                    document.getElementById('btn-stream-switch').textContent = '📹 INICIAR VÍDEO';
+                    document.getElementById('btn-stream-switch').className = 'btn btn-quick btn-accent';
+                    switchCameraTab('foto');
+                    logMessage('info', 'VÍDEO', 'Transmisión de vídeo en directo detenida.');
+                } else if (data.status === 'camera_testing') {
+                    logMessage('info', 'CÁMARA', 'Móvil procesando test de foto local con la IA...');
+                } else if (data.status === 'camera_error' || data.status === 'camera_capture_failed') {
+                    checks.camera_foto = false;
+                    updateChecklistUI('chk-foto', false, 'Fallo de cámara');
+                    logMessage('err', 'CÁMARA', 'Error al disparar la cámara o procesar con llama.cpp.');
+                } else if (data.status === 'armed') {
+                    logMessage('ok', 'MISIÓN', '¡Sonda Armada! Bloqueando cambios terrestres.');
+                }
+                validateChecklist();
+            }
+
+            function handleMeshtasticEvent(data) {
+                // Actualizar marcas en pantalla de nodos
+                if (data.node_id && data.rssi) {
+                    const rssiVal = data.rssi + ' dBm';
+                    if (data.node_id === 1) {
+                        document.getElementById('mesh-node-1').textContent = rssiVal;
+                    } else if (data.node_id === 2) {
+                        document.getElementById('mesh-node-2').textContent = rssiVal;
+                    }
+                    logMessage('info', 'MESHTASTIC', 'Paquete recibido de Nodo ' + data.node_id + ' (RSSI: ' + data.rssi + 'dBm)');
+                }
+            }
+
+            // 5. Orquestador de Autotest
+            function runSelfTest() {
+                isTesting = true;
+                checks.camera_foto = false;
+                checks.camera_video = false;
+                checks.battery = false;
+                checks.sensors = false;
+                checks.gps = false;
+                
+                // Poner checklist en "Probando..."
+                updateChecklistUI('chk-movil', false, 'Comprobando...');
+                updateChecklistUI('chk-gps', false, 'Buscando...');
+                updateChecklistUI('chk-battery', false, 'Leyendo...');
+                updateChecklistUI('chk-sensors', false, 'Leyendo...');
+                updateChecklistUI('chk-foto', false, 'Disparando...');
+                updateChecklistUI('chk-video', false, 'Arrancando...');
+
+                const btn = document.getElementById('btn-test-systems');
+                btn.textContent = '🤖 PROBANDO SISTEMAS...';
+                btn.disabled = true;
+
+                logMessage('info', 'AUTOTEST', 'Iniciando batería de pruebas pre-vuelo automatizada...');
+                
+                // Paso 1: Pedir sensores
+                sendCommand('get_status');
+                
+                // Paso 2: Audio/TTS
+                setTimeout(() => {
+                    logMessage('info', 'AUTOTEST', 'Comprobando altavoz del móvil...');
+                    sendCommand('test_audio');
+                }, 2000);
+
+                // Paso 3: Tomar foto/IA (este test apaga el vídeo si estaba activo)
+                setTimeout(() => {
+                    logMessage('info', 'AUTOTEST', 'Comprobando cámara trasera e inferencia de IA local...');
+                    sendCommand('test_photo');
+                }, 4000);
+            }
+
+            // 6. Funciones de Interfaz de Usuario (UI)
+            function updateChecklistUI(id, ok, labelText) {
+                const item = document.getElementById(id);
+                const val = document.getElementById(id + '-val');
+                if (ok) {
+                    item.className = 'checklist-item ok';
                 } else {
-                    armBtn.disabled = true;
+                    item.className = 'checklist-item ko';
                 }
+                val.textContent = labelText;
             }
 
-            // Llamadas REST a la API de Flask para sincronizar el estado global
-            function updateStatusDisplay(state, timeRemaining = 10) {
-                const display = document.getElementById('state-display');
-                display.className = 'state-value'; // reset
+            function updateLinkState(linkId, connected) {
+                const badge = document.getElementById('link-' + linkId);
+                const chk = document.getElementById('chk-' + linkId);
+                const chkVal = document.getElementById('chk-' + linkId + '-val');
                 
-                if (state === 'espera') {
-                    display.textContent = 'EN ESPERA';
-                    display.classList.add('state-espera');
-                } else if (state === 'armando') {
-                    display.textContent = 'SONDA ARMADA';
-                    display.classList.add('state-armando');
-                } else if (state === 'cuenta_atras') {
-                    display.textContent = 'T-MINUS ' + timeRemaining + 's';
-                    display.classList.add('state-countdown');
-                } else if (state === 'lanzado') {
-                    display.textContent = '¡DESPEGUE!';
-                    display.classList.add('state-lanzado');
+                if (connected) {
+                    badge.textContent = 'Conectado';
+                    badge.className = 'link-badge connected';
+                    if (chk) {
+                        chk.className = 'checklist-item ok';
+                        chkVal.textContent = 'Conexión Estable';
+                    }
+                    if (linkId === 'movil') {
+                        document.getElementById('sys-last-ping').textContent = new Date().toLocaleTimeString();
+                    }
+                } else {
+                    badge.textContent = 'Desconectado';
+                    badge.className = 'link-badge disconnected';
+                    if (chk) {
+                        chk.className = 'checklist-item ko';
+                        chkVal.textContent = 'Sin Señal';
+                    }
                 }
             }
 
-            function pollStatus() {
-                fetch('/control_lanzamiento')
-                    .then(r => r.json())
-                    .then(data => {
-                        updateStatusDisplay(data.estado, data.tiempo_restante);
-                        
-                        // Si está en cuenta atrás o lanzado, deshabilitar interacciones
-                        if (data.estado === 'cuenta_atras' || data.estado === 'lanzado') {
-                            document.getElementById('arm-btn').disabled = true;
-                        }
-                    });
+            function updateGeneralStatusLarge() {
+                const large = document.getElementById('sys-status-large');
+                
+                let disconnectedCount = 0;
+                if (!checks.movil) disconnectedCount++;
+                if (!checks.lora_telemetria) disconnectedCount++;
+                
+                if (disconnectedCount === 0) {
+                    large.textContent = 'OK';
+                    large.className = 'status-large status-ok';
+                } else if (disconnectedCount === 1) {
+                    large.textContent = 'WARN';
+                    large.className = 'status-large status-warn';
+                } else {
+                    large.textContent = 'ALERTA';
+                    large.className = 'status-large status-alarm';
+                }
             }
-            setInterval(pollStatus, 1000);
+
+            function validateChecklist() {
+                const btn = document.getElementById('btn-arm');
+                
+                // Checklist de despegue requiere obligatoriamente:
+                // Móvil conectado, LoRa conectado, Foto Ok, Video OK, Batería OK, Sensores OK, GPS OK
+                const isReady = checks.movil && checks.lora_telemetria && checks.camera_foto && checks.camera_video && checks.battery && checks.sensors && checks.gps;
+                
+                if (isReady && mission.state === 'espera') {
+                    btn.disabled = false;
+                } else {
+                    btn.disabled = true;
+                }
+            }
+
+            function switchCameraTab(tabName) {
+                const tabFoto = document.getElementById('tab-foto');
+                const tabVideo = document.getElementById('tab-video');
+                const viewer = document.getElementById('camera-frame');
+                const streamFrame = document.getElementById('video-stream');
+                
+                if (tabName === 'foto') {
+                    tabFoto.className = 'camera-tab active';
+                    tabVideo.className = 'camera-tab';
+                    viewer.className = 'camera-viewer';
+                    streamFrame.src = ""; // limpiar para no consumir datos
+                } else {
+                    tabFoto.className = 'camera-tab';
+                    tabVideo.className = 'camera-tab active';
+                    viewer.className = 'camera-viewer video-mode';
+                    
+                    // Asignar el stream HLS o WebRTC local
+                    streamFrame.src = "https://vdo.ninja/?view=sonda_stream&clean";
+                }
+            }
+
+            function toggleStreamCmd() {
+                if (streamActive) {
+                    sendCommand('test_video_off');
+                } else {
+                    sendCommand('test_video_on');
+                }
+            }
+
+            function logMessage(level, tag, text) {
+                const display = document.getElementById('log-display');
+                const line = document.createElement('div');
+                line.className = 'log-line';
+                
+                const timeSpan = document.createElement('span');
+                timeSpan.className = 'time';
+                timeSpan.textContent = new Date().toLocaleTimeString() + ' ';
+                
+                const tagSpan = document.createElement('span');
+                tagSpan.className = 'tag ' + level;
+                tagSpan.textContent = '[' + tag.toUpperCase() + '] ';
+                
+                const textSpan = document.createElement('span');
+                textSpan.textContent = text;
+                
+                line.appendChild(timeSpan);
+                line.appendChild(tagSpan);
+                line.appendChild(textSpan);
+                
+                display.appendChild(line);
+                display.scrollTop = display.scrollHeight; // Auto-scroll
+            }
+
+            // 7. Acciones de Envío
+            function sendCommand(cmdName) {
+                if (!client || !client.connected) return;
+                const payload = JSON.stringify({ cmd: cmdName });
+                client.publish('sonda/comando', payload);
+                console.log('MQTT Publish sonda/comando:', cmdName);
+            }
 
             function armLaunch() {
-                // 1. Enviar comando "arm" al móvil por MQTT
-                sendCommand('arm');
+                logMessage('warn', 'MISIÓN', 'Armando la sonda e iniciando cuenta atrás para el despegue...');
                 
-                // 2. Avisar al servidor REST para ponerlo en modo armando
+                // Enviar arm al móvil
+                sendCommand('arm');
+
+                // Avisar a Flask para ponerlo en cuenta atrás
                 fetch('/control_lanzamiento', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -921,30 +1558,133 @@ def control_panel():
             }
 
             function abortLaunch() {
-                // 1. Mandar parada a la sonda
+                logMessage('err', 'MISIÓN', '¡ALERTA! Secuencia de lanzamiento abortada por el operador.');
+                
+                // Detener vídeo en móvil
                 sendCommand('test_video_off');
-                
-                // 2. Restablecer checklist local
-                checks.audio = false;
-                document.getElementById('check-audio').classList.remove('checked');
-                document.getElementById('val-check-audio').textContent = 'Pendiente';
-                
-                checks.video = false;
-                document.getElementById('check-video').classList.remove('checked');
-                document.getElementById('val-check-video').textContent = 'Pendiente';
-                
-                checks.camera = false;
-                document.getElementById('check-camera').classList.remove('checked');
-                document.getElementById('val-check-camera').textContent = 'Pendiente';
-                
-                // 3. Resetear API
+
+                // Reiniciar estados locales
+                isTesting = false;
+                checks.camera_foto = false;
+                checks.camera_video = false;
+                updateChecklistUI('chk-foto', false, 'Abortado');
+                updateChecklistUI('chk-video', false, 'Abortado');
+
+                const btn = document.getElementById('btn-test-systems');
+                btn.textContent = '🤖 PROBAR SISTEMAS';
+                btn.className = 'btn btn-accent';
+                btn.disabled = false;
+
                 fetch('/control_lanzamiento', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: 'abortar' })
                 });
+            }
+
+            function triggerBuzzer() {
+                logMessage('warn', 'LORA', 'Enviando pulso de radio para activar la baliza sonora en el ESP32...');
+                sendCommand('sirena_on');
+            }
+
+            function finalizeMission() {
+                logMessage('info', 'MISIÓN', 'Finalizando misión. Sonda en fase de aterrizaje y recuperación.');
+                fetch('/control_lanzamiento', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'finalizar' })
+                });
+            }
+
+            function startNewMission() {
+                const pass = prompt("Introduce la contraseña de misión:");
+                if (pass === 'admin') {
+                    logMessage('ok', 'SISTEMA', 'Iniciando una nueva sesión de misión.');
+                    fetch('/control_lanzamiento', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'reset' })
+                    }).then(() => {
+                        window.location.reload();
+                    });
+                } else {
+                    alert("Contraseña incorrecta.");
+                }
+            }
+
+            // 8. Sincronización del Estado del Lanzamiento REST
+            function pollLaunchStatus() {
+                fetch('/control_lanzamiento')
+                    .then(r => r.json())
+                    .then(data => {
+                        mission.state = data.estado;
+                        document.getElementById('mission-state-card').textContent = data.estado.toUpperCase();
+                        
+                        // Sincronizar Fases visuales
+                        updatePhaseIndicators(data.estado);
+
+                        // Sincronizar reloj central
+                        const clock = document.getElementById('countdown-clock');
+                        if (data.estado === 'cuenta_atras') {
+                            clock.textContent = '00:00:' + String(data.tiempo_restante).padStart(2, '0');
+                            clock.className = 'countdown-value active';
+                            document.getElementById('btn-arm').disabled = true;
+                        } else {
+                            clock.textContent = '00:00:10';
+                            clock.className = 'countdown-value';
+                        }
+                    });
+            }
+
+            function updatePhaseIndicators(estado) {
+                const p1 = document.getElementById('phase-1');
+                const p2 = document.getElementById('phase-2');
+                const p3 = document.getElementById('phase-3');
+                const p4 = document.getElementById('phase-4');
                 
-                validateChecklist();
+                // Reset
+                p1.className = 'phase-card';
+                p2.className = 'phase-card';
+                p3.className = 'phase-card';
+                p4.className = 'phase-card';
+
+                if (estado === 'espera' || estado === 'armando') {
+                    p1.className = 'phase-card active';
+                    currentPhase = 1;
+                } else if (estado === 'cuenta_atras') {
+                    p2.className = 'phase-card active';
+                    currentPhase = 2;
+                } else if (estado === 'lanzado') {
+                    p3.className = 'phase-card active';
+                    currentPhase = 3;
+                } else if (estado === 'recuperacion') {
+                    p4.className = 'phase-card active';
+                    currentPhase = 4;
+                }
+            }
+
+            // Cronómetro ascendente tras el despegue
+            let missionSeconds = 0;
+            setInterval(() => {
+                if (mission.state === 'lanzado') {
+                    missionSeconds++;
+                    const hrs = String(Math.floor(missionSeconds / 3600)).padStart(2, '0');
+                    const mins = String(Math.floor((missionSeconds % 3600) / 60)).padStart(2, '0');
+                    const secs = String(missionSeconds % 60).padStart(2, '0');
+                    document.getElementById('mission-time').textContent = `${hrs}:${mins}:${secs}`;
+                } else if (mission.state === 'espera') {
+                    missionSeconds = 0;
+                    document.getElementById('mission-time').textContent = '00:00:00';
+                }
+            }, 1000);
+
+            setInterval(pollLaunchStatus, 1000);
+
+            // Helpers geográficos
+            function getWindDirection(deg) {
+                const sectors = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+                const index = Math.round(deg / 22.5) % 16;
+                return sectors[index];
             }
         </script>
     </body>

@@ -70,4 +70,40 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
 6. En el teléfono móvil, crear el archivo `sonda.env` a partir del de ejemplo y rellenar las contraseñas.
 7. Importar el archivo JSON final en Grafana.
 
+---
+
+**Fecha:** 2026-07-05 / 2026-07-06  
+**Sesión:** Implementación del HUD de OBS estilo SpaceX, soporte de WebSockets en Mosquitto, y optimización de la consola de control pre-vuelo en tierra.
+
+## 1. Habilitación de WebSockets en Mosquitto (Puerto 9001)
+* **Objetivo:** Permitir que los navegadores web (como OBS Browser Source o la propia consola de control) se conecten directamente al broker MQTT en tiempo real.
+* **Configuración:**
+  * Modificado `mosquitto.conf` para habilitar el puerto `9001` con el protocolo `websockets` y autenticación requerida.
+  * Creado el archivo encriptado `password_file` para el usuario `admin` y aplicados permisos seguros `644` en el servidor para que el Docker de Mosquitto lo pueda leer.
+  * Añadida la autenticación MQTT al cliente JavaScript en la web de control (`app.py`) y en el HUD de OBS (`telemetria.html`).
+
+## 2. Rediseño del HUD de OBS estilo SpaceX (`codigo/HUD/telemetria.html`)
+* **Diseño:** Recreado el icónico panel de telemetría inferior de la retransmisión de SpaceX (Starship):
+  * Dos gauges de 270 grados en las esquinas inferiores para **Velocidad (KM/H)**, **Altitud (M / KM)**, **Temperatura (°C)** y **Presión Atmosférica (hPa)**.
+  * **Cálculos Dinámicos:**
+    * **Presión:** Calculada mediante la fórmula barométrica estándar internacional según la altitud de la sonda.
+    * **Recorrido:** Cálculo de la distancia en línea recta desde la rampa mediante la fórmula Haversine.
+    * **Dirección (Rumbo):** Rumbo en grados (`0°-359°`) y rosa de vientos (`N`, `NE`, `SW`...) calculado vectorialmente en base a su desviación de las coordenadas iniciales.
+  * **Arco de Trayectoria Central:** Un perfil parabólico SVG con hitos de vuelo (`DESPEGUE`, `1.000m`, `APOGEO`, `DESCENSO`, `RECUPERACIÓN`) donde un marcador cian se desplaza dinámicamente según la altura reportada por la sonda.
+  * **Reloj de Misión:** T-minus para la cuenta atrás (rojo neón) y cronómetro ascendente (`T+`) dinámico tras el despegue.
+  * **Caja de IA Flotante:** Caja inferior translúcida que muestra la descripción que la IA local de la sonda va dictando.
+
+## 3. Automatizaciones y Tests Pre-vuelo en la Consola (`app.py`)
+* **Consola de Control (`/control`):**
+  * Añadido el botón de **`🛰️ Inicializar GPS`** y de **`📸 Test Foto/IA`**.
+  * Incorporada la validación completa en el checklist (se requiere confirmar GPS, batería, altavoz TTS, stream de vídeo y test de IA/Cámara para que el botón de Armar se active).
+  * Soporte de reinicio completo (Abortar) para limpiar todos los estados en un solo clic.
+
+## 4. Corrección de Bug y Optimización del Script del Móvil (`sonda_loop.sh`)
+* **Telemetría Automática:** Añadido un bucle en la fase 0 para enviar telemetría (batería, GPS) automáticamente al broker cada 10 segundos mientras la sonda esté en tierra esperando el armado.
+* **Comando `init_gps`:** Comando bajo demanda que fuerza una búsqueda de satélites activa sin caché (`termux-location -p gps` de 20s en segundo plano), guiando al operador por voz TTS y actualizando el estado de búsqueda en la web.
+* **Comando `test_photo`:** Captura una foto, hace inferencia local en baja resolución para evitar Out Of Memory (OOM) del móvil, pero sube la imagen original en alta resolución a la web por `curl`.
+* **Solución al Cuelgue del Script (Stdin Hijacking):** Corregido un sutil bug de pipes de Bash donde `llama-mtmd-cli` se quedaba congelado. Se solucionó redireccionando la entrada estándar a `/dev/null` (`</dev/null`) tanto en las llamadas a la IA como al receptor de comandos de fondo.
+
+
 

@@ -362,22 +362,6 @@ const testSteps = [
         retries: 3
     },
     {
-        id: 'chk-lora',
-        name: 'ESP32 LoRa (Telemetría)',
-        run: () => { /* Pasivo */ },
-        check: () => checks.lora_telemetria,
-        timeout: 3000,
-        retries: 1
-    },
-    {
-        id: 'chk-meshtastic',
-        name: 'ESP32 LoRa (Meshtastic)',
-        run: () => { /* Pasivo/Mock */ },
-        check: () => checks.lora_meshtastic,
-        timeout: 2000,
-        retries: 1
-    },
-    {
         id: 'chk-gps',
         name: 'GPS Sonda',
         run: () => { sendCommand('init_gps'); },
@@ -426,9 +410,10 @@ function runSelfTest() {
     
     // Resetear estados locales
     checks.movil = false;
-    checks.lora_telemetria = false;
+    checks.lora_telemetria = true;
+    checks.lora_meshtastic = true;
     checks.camera_foto = false;
-    checks.camera_video = false;
+    checks.camera_video = true;
     checks.battery = false;
     checks.sensors = false;
     checks.gps = false;

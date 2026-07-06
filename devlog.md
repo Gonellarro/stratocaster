@@ -124,3 +124,12 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
 * **Reordenación y Simplificación de Checklist:** Reordenado el listado HTML para coincidir exactamente con el orden secuencial del script de pruebas. Eliminado el paso de test de vídeo automático para evitar congelamientos en caliente.
 * **Bypass de LoRa y Meshtastic:** Se configuraron ambos enlaces para que carguen en verde (`ok`/`Omitido`) directamente al iniciar o resetear, evitando esperas pasivas y permitiendo al operador centrarse en el móvil y la cámara.
 * **Animación de Spinner de Neón:** Reemplazada la animación de los puntos suspensivos por un mini spinner circular de neón cian que gira fluidamente en el interior del checkbox mientras la prueba está en progreso.
+
+## 4. Refactorización y Separación del Frontend (HTML/CSS/JS)
+* **Arquitectura limpia:** Separados los enormes templates inline de Python/Flask a sus carpetas correspondientes:
+  - `templates/control.html` y `templates/fotos.html`
+  - `static/css/control.css` y `static/css/fotos.css`
+  - `static/js/control.js` y `static/js/fotos.js`
+* **Limpieza de app.py:** Reducido `app.py` de más de 1900 líneas a solo 160 líneas de pura lógica de Flask, mejorando drásticamente el mantenimiento.
+* **Actualización de Dockerfile:** Modificado para copiar toda la estructura del directorio (`COPY . .`) y no solo el script python, garantizando que el contenedor tenga acceso a las vistas estáticas.
+

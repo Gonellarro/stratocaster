@@ -552,11 +552,32 @@ def control_panel():
                 border-radius: 8px;
                 padding-left: 0.4rem;
                 padding-right: 0.4rem;
-                animation: pulseHighlight 1s infinite alternate;
             }
-            @keyframes pulseHighlight {
-                0% { opacity: 0.7; }
-                100% { opacity: 1; }
+            .checklist-item.testing .checklist-status {
+                border-color: var(--cyan-accent);
+                background: rgba(6, 182, 212, 0.08);
+                color: transparent;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .checklist-item.testing .checklist-status::after {
+                content: "...";
+                color: var(--cyan-accent);
+                font-family: monospace;
+                font-size: 1.1rem;
+                font-weight: bold;
+                letter-spacing: -1.5px;
+                animation: dotsPulse 1.2s infinite steps(4);
+                line-height: 1;
+                margin-top: -6px;
+                margin-left: -1px;
+            }
+            @keyframes dotsPulse {
+                0% { content: ""; }
+                33% { content: "."; }
+                66% { content: ".."; }
+                100% { content: "..."; }
             }
             .checklist-status {
                 width: 16px; height: 16px;
@@ -572,14 +593,21 @@ def control_panel():
                 color: #fff;
                 box-shadow: 0 0 6px var(--green-glow);
             }
+            .checklist-item.warn .checklist-status {
+                background-color: var(--yellow-accent);
+                border-color: var(--yellow-accent);
+                color: #fff;
+                box-shadow: 0 0 6px var(--yellow-glow);
+            }
             .checklist-item.ko .checklist-status {
                 background-color: var(--red-accent);
                 border-color: var(--red-accent);
                 color: #fff;
                 box-shadow: 0 0 6px var(--red-glow);
             }
-            .checklist-item.ko .checklist-status::after { content: "✗"; }
-            .checklist-item.ok .checklist-status::after { content: "✓"; }
+            .checklist-item.ko .checklist-status::after { content: "✗"; color: #fff; }
+            .checklist-item.ok .checklist-status::after { content: "✓"; color: #fff; }
+            .checklist-item.warn .checklist-status::after { content: "⚠"; color: #000; font-weight: bold; }
             .checklist-label { flex-grow: 1; }
             .checklist-val { font-family: monospace; color: var(--text-muted); font-size: 0.8rem; }
             
@@ -1335,19 +1363,32 @@ def control_panel():
 
             function handleSondaEvent(data) {
                 if (data.status === 'gps_initializing') {
-                    updateChecklistUI('chk-gps', false, 'Buscando satélites...');
+                    updateChecklistUI('chk-gps', 'testing', 'Buscando satélites...');
                     logMessage('warn', 'GPS', 'Iniciando búsqueda activa de satélites GPS...');
+                } else if (data.status === 'gps_ok') {
+                    if (data.lat !== undefined && data.lat !== null) {
+                        handleMobileTelemetry(data);
+                    }
+                    if (data.accuracy && data.accuracy <= 15) {
+                        checks.gps = true;
+                        updateChecklistUI('chk-gps', 'ok', 'Fijo (' + parseFloat(data.accuracy).toFixed(1) + 'm)');
+                    } else {
+                        checks.gps = true; // Aceptamos como recibido, pero en advertencia
+                        updateChecklistUI('chk-gps', 'warn', 'Fijo (' + parseFloat(data.accuracy || 0).toFixed(1) + 'm)');
+                    }
+                    logMessage('ok', 'GPS', 'Señal de GPS fijada (Precisión: ' + (data.accuracy || '--') + 'm).');
                 } else if (data.status === 'gps_failed') {
-                    updateChecklistUI('chk-gps', false, 'Error de Enlace');
-                    logMessage('err', 'GPS', 'Fallo al inicializar GPS (sin cobertura).');
+                    checks.gps = false;
+                    updateChecklistUI('chk-gps', 'ko', 'Fallo Fijación');
+                    logMessage('err', 'GPS', 'Fallo al fijar señal GPS.');
                 } else if (data.status === 'audio_ok') {
                     checks.audio = true;
-                    updateChecklistUI('chk-audio', true, 'Confirmado');
+                    updateChecklistUI('chk-audio', 'ok', 'Confirmado');
                     logMessage('ok', 'AUDIO', 'Prueba de altavoz confirmada en el móvil.');
                 } else if (data.status === 'video_streaming_on') {
                     streamActive = true;
                     checks.camera_video = true;
-                    updateChecklistUI('chk-video', true, 'Transmitiendo');
+                    updateChecklistUI('chk-video', 'ok', 'Transmitiendo');
                     document.getElementById('btn-stream-switch').textContent = '🔌 DETENER VÍDEO';
                     document.getElementById('btn-stream-switch').className = 'btn btn-quick btn-outline-red';
                     switchCameraTab('video');
@@ -1362,7 +1403,7 @@ def control_panel():
                     logMessage('info', 'CÁMARA', 'Móvil procesando test de foto local con la IA...');
                 } else if (data.status === 'camera_error' || data.status === 'camera_capture_failed') {
                     checks.camera_foto = false;
-                    updateChecklistUI('chk-foto', false, 'Fallo de cámara');
+                    updateChecklistUI('chk-foto', 'ko', 'Fallo de cámara');
                     logMessage('err', 'CÁMARA', 'Error al disparar la cámara o procesar con llama.cpp.');
                 } else if (data.status === 'armed') {
                     logMessage('ok', 'MISIÓN', '¡Sonda Armada! Bloqueando cambios terrestres.');
@@ -1390,63 +1431,72 @@ def control_panel():
                     name: 'Móvil (Android)',
                     run: () => { sendCommand('get_status'); },
                     check: () => checks.movil,
-                    timeout: 5000
+                    timeout: 4000,
+                    retries: 3
                 },
                 {
                     id: 'chk-lora',
                     name: 'ESP32 LoRa (Telemetría)',
                     run: () => { /* Pasivo */ },
                     check: () => checks.lora_telemetria,
-                    timeout: 4000
+                    timeout: 3000,
+                    retries: 1
                 },
                 {
                     id: 'chk-meshtastic',
                     name: 'ESP32 LoRa (Meshtastic)',
                     run: () => { /* Pasivo/Mock */ },
                     check: () => checks.lora_meshtastic,
-                    timeout: 3000
+                    timeout: 2000,
+                    retries: 1
                 },
                 {
                     id: 'chk-gps',
                     name: 'GPS Sonda',
                     run: () => { sendCommand('init_gps'); },
                     check: () => checks.gps,
-                    timeout: 20000 // Subimos a 20s para permitir la inicialización y búsqueda de satélites física
+                    timeout: 15000, // 15 segundos para dar tiempo al receptor físico GPS o su fallback de red
+                    retries: 1
                 },
                 {
                     id: 'chk-battery',
                     name: 'Batería Móvil',
                     run: () => { sendCommand('get_status'); },
                     check: () => checks.battery,
-                    timeout: 5000
+                    timeout: 3000,
+                    retries: 1
                 },
                 {
                     id: 'chk-sensors',
                     name: 'Sensores Sonda',
                     run: () => { sendCommand('get_status'); },
                     check: () => checks.sensors,
-                    timeout: 5000
+                    timeout: 3000,
+                    retries: 1
                 },
                 {
                     id: 'chk-audio',
                     name: 'Altavoz (TTS)',
                     run: () => { sendCommand('test_audio'); },
                     check: () => checks.audio,
-                    timeout: 6000
+                    timeout: 5000,
+                    retries: 2
                 },
                 {
                     id: 'chk-foto',
                     name: 'Cámara (Foto e IA)',
                     run: () => { sendCommand('test_photo'); },
                     check: () => checks.camera_foto,
-                    timeout: 25000 // La inferencia local y upload toma tiempo
+                    timeout: 20000, // La inferencia local y upload toma tiempo
+                    retries: 1 // No queremos reintentar inferencias pesadas
                 },
                 {
                     id: 'chk-video',
                     name: 'Cámara (Vídeo)',
                     run: () => { sendCommand('test_video_on'); },
                     check: () => checks.camera_video,
-                    timeout: 8000
+                    timeout: 6000,
+                    retries: 2
                 }
             ];
 
@@ -1496,7 +1546,7 @@ def control_panel():
                 }
                 
                 const step = testSteps[currentStepIndex];
-                highlightStepUI(step.id, true);
+                updateChecklistUI(step.id, 'testing', 'Probando...');
                 
                 // Si la caché ya es válida, pasamos al siguiente
                 if (step.check()) {
@@ -1505,7 +1555,7 @@ def control_panel():
                     return;
                 }
                 
-                logMessage('info', 'TEST', `Comprobando ${step.name}... (Intento ${currentRetry + 1}/3)`);
+                logMessage('info', 'TEST', `Comprobando ${step.name}... (Intento ${currentRetry + 1}/${step.retries})`);
                 step.run();
                 
                 clearTimeout(stepTimeoutTimer);
@@ -1518,8 +1568,31 @@ def control_panel():
                 clearTimeout(stepTimeoutTimer);
                 const step = testSteps[currentStepIndex];
                 
-                updateChecklistUI(step.id, true, 'CONFIRMADO');
-                highlightStepUI(step.id, false);
+                // Para la batería, mostramos su estado warn/ok real
+                if (step.id === 'chk-battery') {
+                    const batText = document.getElementById('td-m-bat').textContent;
+                    const batLvl = parseInt(batText) || 100;
+                    if (batLvl >= 75) {
+                        updateChecklistUI(step.id, 'ok', batText);
+                    } else if (batLvl >= 50) {
+                        updateChecklistUI(step.id, 'warn', batText);
+                    } else {
+                        updateChecklistUI(step.id, 'ko', batText + ' (Baja)');
+                    }
+                } else if (step.id === 'chk-gps') {
+                    // Mantener texto de precisión si está
+                    const accText = document.getElementById('chk-gps-val').textContent;
+                    if (accText && accText.includes('m')) {
+                        const match = accText.match(/\d+(\.\d+)?/);
+                        const accVal = match ? parseFloat(match[0]) : 99;
+                        updateChecklistUI(step.id, accVal <= 15 ? 'ok' : 'warn', accText);
+                    } else {
+                        updateChecklistUI(step.id, 'ok', 'CONFIRMADO');
+                    }
+                } else {
+                    updateChecklistUI(step.id, 'ok', 'CONFIRMADO');
+                }
+                
                 logMessage('ok', 'TEST', `${step.name} confirmado.`);
                 
                 if (step.id === 'chk-video') {
@@ -1545,16 +1618,17 @@ def control_panel():
                 }
                 
                 currentRetry++;
-                if (currentRetry < 3) {
-                    logMessage('warn', 'TEST', `${step.name} sin respuesta. Reintentando (${currentRetry + 1}/3)...`);
-                    highlightStepUI(step.id, false);
+                const maxRetries = step.retries || 3;
+                if (currentRetry < maxRetries) {
+                    logMessage('warn', 'TEST', `${step.name} sin respuesta. Reintentando (${currentRetry + 1}/${maxRetries})...`);
+                    const item = document.getElementById(step.id);
+                    if (item) item.classList.remove('testing');
                     setTimeout(() => {
                         executeCurrentStep();
                     }, 300);
                 } else {
-                    logMessage('err', 'TEST', `${step.name} falló tras 3 intentos.`);
-                    updateChecklistUI(step.id, false, 'ERROR (KO)');
-                    highlightStepUI(step.id, false);
+                    logMessage('err', 'TEST', `${step.name} falló tras ${maxRetries} intentos.`);
+                    updateChecklistUI(step.id, 'ko', 'ERROR (KO)');
                     
                     setTimeout(() => {
                         currentStepIndex++;
@@ -1574,25 +1648,24 @@ def control_panel():
                 });
             }
 
-            function highlightStepUI(id, active) {
-                const el = document.getElementById(id);
-                if (!el) return;
-                if (active) {
-                    el.classList.add('testing');
-                } else {
-                    el.classList.remove('testing');
-                }
-            }
-
             // 6. Funciones de Interfaz de Usuario (UI)
-            function updateChecklistUI(id, ok, labelText) {
+            function updateChecklistUI(id, state, labelText) {
                 const item = document.getElementById(id);
                 const val = document.getElementById(id + '-val');
-                if (ok) {
-                    item.className = 'checklist-item ok';
+                if (!item) return;
+                
+                item.classList.remove('ok', 'ko', 'warn', 'testing');
+                
+                if (state === 'ok' || state === true) {
+                    item.classList.add('ok');
+                } else if (state === 'warn') {
+                    item.classList.add('warn');
+                } else if (state === 'testing') {
+                    item.classList.add('testing');
                 } else {
-                    item.className = 'checklist-item ko';
+                    item.classList.add('ko');
                 }
+                
                 if (val) val.textContent = labelText;
             }
 

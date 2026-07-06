@@ -109,7 +109,13 @@ handle_command() {
             
             # Ejecutar búsqueda de satélites activa en segundo plano (puede tardar 10-15s)
             (
-                LOC_JSON=$(timeout 20 termux-location -p gps 2>/dev/null)
+                # Intentar primero por GPS físico (satélites)
+                LOC_JSON=$(timeout 15 termux-location -p gps 2>/dev/null)
+                # Si falla o está vacío, intentar por red (celular/WiFi) para posibilitar pruebas en interiores
+                if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{" } || [ "$LOC_JSON" = "{}" ]; then
+                    echo "[🛰️ GPS] Reintentando por proveedor de red (interiores)..."
+                    LOC_JSON=$(timeout 8 termux-location -p network 2>/dev/null)
+                fi
                 if [ -n "$LOC_JSON" ] && [ "$LOC_JSON" != "{}" ]; then
                     LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
                     LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')
@@ -159,6 +165,11 @@ handle_command() {
             # Captura de foto e inferencia IA bajo demanda (para pruebas pre-vuelo)
             echo "[📸 CÁMARA] Solicitud de test de foto e IA local recibida..."
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "camera_testing"}'
+            
+            # Liberar la cámara deteniendo Chrome/VDO.ninja si estuvieran activos
+            am force-stop com.android.chrome &>/dev/null
+            am force-stop flutter.vdo.ninja &>/dev/null
+            sleep 1
             
             termux-camera-photo -c 0 "$TARGET_IMG"
             

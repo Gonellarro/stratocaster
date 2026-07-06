@@ -104,6 +104,20 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
 * **Comando `init_gps`:** Comando bajo demanda que fuerza una búsqueda de satélites activa sin caché (`termux-location -p gps` de 20s en segundo plano), guiando al operador por voz TTS y actualizando el estado de búsqueda en la web.
 * **Comando `test_photo`:** Captura una foto, hace inferencia local en baja resolución para evitar Out Of Memory (OOM) del móvil, pero sube la imagen original en alta resolución a la web por `curl`.
 * **Solución al Cuelgue del Script (Stdin Hijacking):** Corregido un sutil bug de pipes de Bash donde `llama-mtmd-cli` se quedaba congelado. Se solucionó redireccionando la entrada estándar a `/dev/null` (`</dev/null`) tanto en las llamadas a la IA como al receptor de comandos de fondo.
+---
 
+**Fecha:** 2026-07-06  
+**Sesión:** Secuenciador asíncrono pre-vuelo, reintentos con animación de puntos suspensivos en checklist y robustez de GPS en interiores.
 
+## 1. Asincronismo Completo en el Móvil (`sonda_loop.sh`)
+* **Ejecución Asíncrona (`&`):** Lanzados los comandos internos del receptor MQTT en segundo plano (`handle_command "$CMD" </dev/null &`). Esto evita que procesos lentos (como hablar por TTS o procesar fotos con la IA local) bloqueen la lectura de la tubería MQTT de Termux.
 
+## 2. Robustez de Geolocalización y Fallback GPS
+* **Fallback a Red Celular/WiFi:** Modificado el comando `init_gps` del móvil para que intente primero una búsqueda de satélites física (`gps` durante 15s) y, si falla (como en interiores), intente por red (`network` durante 8s). Esto asegura que el test de posicionamiento funcione tanto bajo techo como en campo abierto.
+* **Control Web de Satélites:** Habilitada la recepción de los estados `gps_ok` y `gps_failed` en el cliente JavaScript de `/control`, permitiendo actualizar las coordenadas y marcar el GPS como verificado de inmediato.
+
+## 3. Secuenciador Visual de Autotest
+* **Animación de Puntos Suspendidos:** Implementada una animación CSS de máquina de escribir de tres puntos horizontales (`...`) en la casilla de verificación mientras se está realizando una prueba.
+* **Reintentos Dinámicos:** Asignados números de reintentos configurables por paso para evitar esperas interminables en pruebas lentas (ej: 1 intento para GPS o LoRa, 3 para la IP del móvil, 2 para TTS).
+* **Nivel de Batería Tricolor:** Clasificación de batería en tres niveles de color en el checklist: Verde (Ok, >=75%), Naranja (Warn, 50-74%) y Rojo (Ko, <50%).
+* **Prevención de Conflictos de Cámara:** Añadido un `am force-stop` a Chrome/VDO.ninja al inicio de `test_photo` en el móvil, garantizando que el hardware de la cámara quede libre para el disparo del test de foto/IA.

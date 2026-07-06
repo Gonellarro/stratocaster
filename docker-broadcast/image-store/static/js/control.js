@@ -210,15 +210,12 @@ function handleSondaDiagnostics(data) {
         updateChecklistUI('chk-battery', false, data.level + '% (Batería Baja!)');
     }
 
-    // Validación de GPS
+    // Validación de GPS (Ignorando filtro estricto de accuracy)
     const hasAcc = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null");
-    if (hasAcc && data.accuracy <= 15) {
+    if (data.lat !== undefined && data.lat !== null && data.lat !== 'null' && data.lat !== 0) {
         checks.gps = true;
-        updateChecklistUI('chk-gps', 'ok', 'Fijo (' + data.accuracy + 'm)');
-    } else if (data.lat !== null && data.lat !== 'null' && data.lat !== 0) {
-        // Si tenemos coordenadas válidas pero no hay precisión o es baja, lo marcamos como warn en lugar de ko
-        checks.gps = true;
-        updateChecklistUI('chk-gps', 'warn', hasAcc ? 'Fijo (' + data.accuracy + 'm)' : 'Fijo (Sin Prec.)');
+        const accText = hasAcc ? ' (' + data.accuracy + 'm)' : '';
+        updateChecklistUI('chk-gps', 'ok', 'Fijo' + accText);
     } else if (!checks.gps) {
         updateChecklistUI('chk-gps', 'ko', 'Sin Enlace');
     }
@@ -245,13 +242,12 @@ function handleMobileTelemetry(data) {
         paths.movil.addLatLng(latlng);
     }
     
+    // Validación de GPS (Ignorando filtro estricto de accuracy)
     const hasAcc = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null");
-    if (hasAcc && data.accuracy <= 15) {
+    if (data.lat !== undefined && data.lat !== null && data.lat !== 'null' && data.lat !== 0) {
         checks.gps = true;
-        updateChecklistUI('chk-gps', true, 'Fijo (' + data.accuracy + 'm)');
-    } else if (data.lat !== null && data.lat !== 0) {
-        checks.gps = true;
-        updateChecklistUI('chk-gps', 'warn', hasAcc ? 'Fijo (' + data.accuracy + 'm)' : 'Fijo (Sin Prec.)');
+        const accText = hasAcc ? ' (' + data.accuracy + 'm)' : '';
+        updateChecklistUI('chk-gps', true, 'Fijo' + accText);
     }
     validateChecklist();
 }
@@ -316,13 +312,9 @@ function handleSondaEvent(data) {
             paths.movil.addLatLng(latlng);
             map.setView(latlng, 15);
         }
-        if (data.accuracy && data.accuracy <= 15) {
-            checks.gps = true;
-            updateChecklistUI('chk-gps', 'ok', 'Fijo (' + parseFloat(data.accuracy).toFixed(1) + 'm)');
-        } else {
-            checks.gps = true;
-            updateChecklistUI('chk-gps', 'warn', 'Fijo (' + parseFloat(data.accuracy || 0).toFixed(1) + 'm)');
-        }
+        checks.gps = true;
+        const accText = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null" && data.accuracy !== 0) ? ' (' + parseFloat(data.accuracy).toFixed(1) + 'm)' : '';
+        updateChecklistUI('chk-gps', 'ok', 'Fijo' + accText);
         logMessage('ok', 'GPS', 'Señal de GPS fijada (Precisión: ' + (data.accuracy || '--') + 'm).');
     } else if (data.status === 'gps_failed') {
         checks.gps = false;

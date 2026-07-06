@@ -5,6 +5,7 @@ let lastMeshPing = 0;
 let streamActive = false;
 let isTesting = false;
 let currentPhase = 1;
+let mapCentered = false;
 
 // Checklist local status variables
 let checks = {
@@ -196,6 +197,10 @@ function handleSondaDiagnostics(data) {
         let latlng = [parseFloat(data.lat), parseFloat(data.lng)];
         markers.movil.setLatLng(latlng);
         paths.movil.addLatLng(latlng);
+        if (!mapCentered) {
+            map.setView(latlng, 15);
+            mapCentered = true;
+        }
     }
 
     // Actualizar Checklist
@@ -240,6 +245,10 @@ function handleMobileTelemetry(data) {
         let latlng = [parseFloat(data.lat), parseFloat(data.lng)];
         markers.movil.setLatLng(latlng);
         paths.movil.addLatLng(latlng);
+        if (!mapCentered) {
+            map.setView(latlng, 15);
+            mapCentered = true;
+        }
     }
     
     // Validación de GPS (Ignorando filtro estricto de accuracy)
@@ -273,6 +282,10 @@ function handleLoraTelemetry(data) {
         let latlng = [parseFloat(data.lat), parseFloat(data.lng)];
         markers.lora.setLatLng(latlng);
         paths.lora.addLatLng(latlng);
+        if (!mapCentered) {
+            map.setView(latlng, 15);
+            mapCentered = true;
+        }
     }
 }
 

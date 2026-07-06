@@ -259,8 +259,8 @@ rm -f "$ARMED_FLAG"
     mosquitto_sub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/comando" 2>/dev/null | while read -r line; do
         CMD=$(echo "$line" | jq -r '.cmd // empty')
         if [ -n "$CMD" ]; then
-            # Redirigir entrada estándar para evitar que comandos hijos secuestren el pipe de mosquitto
-            handle_command "$CMD" </dev/null
+            # Redirigir entrada estándar y lanzar en segundo plano para evitar bloqueos
+            handle_command "$CMD" </dev/null &
         fi
     done
 ) &

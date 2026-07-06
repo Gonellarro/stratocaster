@@ -543,6 +543,20 @@ def control_panel():
                 gap: 0.6rem;
                 padding: 0.4rem 0;
                 font-size: 0.85rem;
+                transition: all 0.3s ease;
+            }
+            .checklist-item.testing {
+                border: 1px solid var(--cyan-accent) !important;
+                background: rgba(6, 182, 212, 0.08) !important;
+                box-shadow: 0 0 10px var(--cyan-glow);
+                border-radius: 8px;
+                padding-left: 0.4rem;
+                padding-right: 0.4rem;
+                animation: pulseHighlight 1s infinite alternate;
+            }
+            @keyframes pulseHighlight {
+                0% { opacity: 0.7; }
+                100% { opacity: 1; }
             }
             .checklist-status {
                 width: 16px; height: 16px;
@@ -1058,8 +1072,15 @@ def control_panel():
                 camera_video: false,
                 battery: false,
                 sensors: false,
-                gps: false
+                gps: false,
+                audio: false
             };
+
+            // Secuenciador de pruebas pre-vuelo
+            let currentStepIndex = -1;
+            let currentRetry = 0;
+            let stepTimeoutTimer = null;
+            let isSequenceRunning = false;
 
             // Estructura de Misión
             let mission = {
@@ -1161,6 +1182,13 @@ def control_panel():
                     checks.lora_meshtastic = true;
                     updateLinkState('meshtastic', true);
                     handleMeshtasticEvent(payload);
+                }
+                // Si la secuencia de pruebas está activa, comprobar éxito inmediatamente
+                if (isSequenceRunning) {
+                    const step = testSteps[currentStepIndex];
+                    if (step && step.check()) {
+                        handleStepSuccess();
+                    }
                 }
             });
 
@@ -1302,26 +1330,6 @@ def control_panel():
                 
                 checks.camera_foto = true;
                 updateChecklistUI('chk-foto', true, 'Foto & IA Confirmada');
-
-                // Si estamos en medio del autotest
-                if (isTesting) {
-                    logMessage('info', 'AUTOTEST', 'Test de Foto completado. Iniciando transmisión de vídeo en directo...');
-                    setTimeout(() => {
-                        sendCommand('test_video_on');
-                    }, 2000);
-                    
-                    // Apagar vídeo a los 6 segundos para finalizar el test
-                    setTimeout(() => {
-                        logMessage('info', 'AUTOTEST', 'Vídeo transmitido correctamente. Apagando vídeo...');
-                        sendCommand('test_video_off');
-                        isTesting = false;
-                        const btn = document.getElementById('btn-test-systems');
-                        btn.textContent = '🤖 SISTEMAS COMPROBADOS (OK)';
-                        btn.classList.add('btn-accent');
-                        btn.disabled = false;
-                    }, 8000);
-                }
-
                 validateChecklist();
             }
 
@@ -1333,6 +1341,8 @@ def control_panel():
                     updateChecklistUI('chk-gps', false, 'Error de Enlace');
                     logMessage('err', 'GPS', 'Fallo al inicializar GPS (sin cobertura).');
                 } else if (data.status === 'audio_ok') {
+                    checks.audio = true;
+                    updateChecklistUI('chk-audio', true, 'Confirmado');
                     logMessage('ok', 'AUDIO', 'Prueba de altavoz confirmada en el móvil.');
                 } else if (data.status === 'video_streaming_on') {
                     streamActive = true;
@@ -1373,43 +1383,205 @@ def control_panel():
                 }
             }
 
-            // 5. Orquestador de Autotest
+            // Definición de Pasos del Secuenciador Pre-Vuelo
+            const testSteps = [
+                {
+                    id: 'chk-movil',
+                    name: 'Móvil (Android)',
+                    run: () => { sendCommand('get_status'); },
+                    check: () => checks.movil,
+                    timeout: 5000
+                },
+                {
+                    id: 'chk-lora',
+                    name: 'ESP32 LoRa (Telemetría)',
+                    run: () => { /* Pasivo */ },
+                    check: () => checks.lora_telemetria,
+                    timeout: 4000
+                },
+                {
+                    id: 'chk-meshtastic',
+                    name: 'ESP32 LoRa (Meshtastic)',
+                    run: () => { /* Pasivo/Mock */ },
+                    check: () => checks.lora_meshtastic,
+                    timeout: 3000
+                },
+                {
+                    id: 'chk-gps',
+                    name: 'GPS Sonda',
+                    run: () => { sendCommand('get_status'); },
+                    check: () => checks.gps,
+                    timeout: 6000
+                },
+                {
+                    id: 'chk-battery',
+                    name: 'Batería Móvil',
+                    run: () => { sendCommand('get_status'); },
+                    check: () => checks.battery,
+                    timeout: 5000
+                },
+                {
+                    id: 'chk-sensors',
+                    name: 'Sensores Sonda',
+                    run: () => { sendCommand('get_status'); },
+                    check: () => checks.sensors,
+                    timeout: 5000
+                },
+                {
+                    id: 'chk-audio',
+                    name: 'Altavoz (TTS)',
+                    run: () => { sendCommand('test_audio'); },
+                    check: () => checks.audio,
+                    timeout: 6000
+                },
+                {
+                    id: 'chk-foto',
+                    name: 'Cámara (Foto e IA)',
+                    run: () => { sendCommand('test_photo'); },
+                    check: () => checks.camera_foto,
+                    timeout: 25000 // La inferencia local y upload toma tiempo
+                },
+                {
+                    id: 'chk-video',
+                    name: 'Cámara (Vídeo)',
+                    run: () => { sendCommand('test_video_on'); },
+                    check: () => checks.camera_video,
+                    timeout: 8000
+                }
+            ];
+
+            // 5. Orquestador de Autotest Secuencial
             function runSelfTest() {
-                isTesting = true;
+                if (isSequenceRunning) return;
+                isSequenceRunning = true;
+                
+                // Resetear estados locales
+                checks.movil = false;
+                checks.lora_telemetria = false;
                 checks.camera_foto = false;
                 checks.camera_video = false;
                 checks.battery = false;
                 checks.sensors = false;
                 checks.gps = false;
-                
-                // Poner checklist en "Probando..."
-                updateChecklistUI('chk-movil', false, 'Comprobando...');
-                updateChecklistUI('chk-gps', false, 'Buscando...');
-                updateChecklistUI('chk-battery', false, 'Leyendo...');
-                updateChecklistUI('chk-sensors', false, 'Leyendo...');
-                updateChecklistUI('chk-foto', false, 'Disparando...');
-                updateChecklistUI('chk-video', false, 'Arrancando...');
+                checks.audio = false;
 
+                resetChecklistUI();
+                
+                currentStepIndex = 0;
+                currentRetry = 0;
+                
                 const btn = document.getElementById('btn-test-systems');
-                btn.textContent = '🤖 PROBANDO SISTEMAS...';
+                btn.textContent = '🤖 EJECUTANDO AUTO-TEST...';
+                btn.className = 'btn btn-quick btn-outline-red';
+                btn.style.color = 'var(--yellow-accent)';
+                btn.style.borderColor = 'var(--yellow-accent)';
                 btn.disabled = true;
 
-                logMessage('info', 'AUTOTEST', 'Iniciando batería de pruebas pre-vuelo automatizada...');
-                
-                // Paso 1: Pedir sensores
-                sendCommand('get_status');
-                
-                // Paso 2: Audio/TTS
-                setTimeout(() => {
-                    logMessage('info', 'AUTOTEST', 'Comprobando altavoz del móvil...');
-                    sendCommand('test_audio');
-                }, 2000);
+                logMessage('info', 'TEST', 'Iniciando secuencia de comprobación de sistemas paso a paso...');
+                executeCurrentStep();
+            }
 
-                // Paso 3: Tomar foto/IA (este test apaga el vídeo si estaba activo)
+            function executeCurrentStep() {
+                if (currentStepIndex >= testSteps.length) {
+                    isSequenceRunning = false;
+                    const btn = document.getElementById('btn-test-systems');
+                    btn.textContent = '🤖 SISTEMAS COMPROBADOS';
+                    btn.className = 'btn btn-accent';
+                    btn.style.color = '#000';
+                    btn.style.borderColor = 'none';
+                    btn.disabled = false;
+                    logMessage('ok', 'TEST', 'Secuencia de auto-test completada.');
+                    validateChecklist();
+                    return;
+                }
+                
+                const step = testSteps[currentStepIndex];
+                highlightStepUI(step.id, true);
+                
+                // Si la caché ya es válida, pasamos al siguiente
+                if (step.check()) {
+                    logMessage('ok', 'TEST', `${step.name} verificado por caché.`);
+                    handleStepSuccess();
+                    return;
+                }
+                
+                logMessage('info', 'TEST', `Comprobando ${step.name}... (Intento ${currentRetry + 1}/3)`);
+                step.run();
+                
+                clearTimeout(stepTimeoutTimer);
+                stepTimeoutTimer = setTimeout(() => {
+                    handleStepTimeout();
+                }, step.timeout);
+            }
+
+            function handleStepSuccess() {
+                clearTimeout(stepTimeoutTimer);
+                const step = testSteps[currentStepIndex];
+                
+                updateChecklistUI(step.id, true, 'CONFIRMADO');
+                highlightStepUI(step.id, false);
+                logMessage('ok', 'TEST', `${step.name} confirmado.`);
+                
+                if (step.id === 'chk-video') {
+                    // Detener el vídeo 4 segundos después de validarlo
+                    setTimeout(() => {
+                        sendCommand('test_video_off');
+                    }, 4000);
+                }
+                
+                // Esperar 0.5s y avanzar
                 setTimeout(() => {
-                    logMessage('info', 'AUTOTEST', 'Comprobando cámara trasera e inferencia de IA local...');
-                    sendCommand('test_photo');
-                }, 4000);
+                    currentStepIndex++;
+                    currentRetry = 0;
+                    executeCurrentStep();
+                }, 500);
+            }
+
+            function handleStepTimeout() {
+                const step = testSteps[currentStepIndex];
+                if (step.check()) {
+                    handleStepSuccess();
+                    return;
+                }
+                
+                currentRetry++;
+                if (currentRetry < 3) {
+                    logMessage('warn', 'TEST', `${step.name} sin respuesta. Reintentando (${currentRetry + 1}/3)...`);
+                    highlightStepUI(step.id, false);
+                    setTimeout(() => {
+                        executeCurrentStep();
+                    }, 300);
+                } else {
+                    logMessage('err', 'TEST', `${step.name} falló tras 3 intentos.`);
+                    updateChecklistUI(step.id, false, 'ERROR (KO)');
+                    highlightStepUI(step.id, false);
+                    
+                    setTimeout(() => {
+                        currentStepIndex++;
+                        currentRetry = 0;
+                        executeCurrentStep();
+                    }, 500);
+                }
+            }
+
+            function resetChecklistUI() {
+                const ids = ['chk-movil', 'chk-lora', 'chk-meshtastic', 'chk-foto', 'chk-video', 'chk-battery', 'chk-sensors', 'chk-gps', 'chk-audio'];
+                ids.forEach(id => {
+                    const item = document.getElementById(id);
+                    if (item) item.className = 'checklist-item';
+                    const val = document.getElementById(id + '-val');
+                    if (val) val.textContent = 'Pendiente';
+                });
+            }
+
+            function highlightStepUI(id, active) {
+                const el = document.getElementById(id);
+                if (!el) return;
+                if (active) {
+                    el.classList.add('testing');
+                } else {
+                    el.classList.remove('testing');
+                }
             }
 
             // 6. Funciones de Interfaz de Usuario (UI)
@@ -1421,7 +1593,7 @@ def control_panel():
                 } else {
                     item.className = 'checklist-item ko';
                 }
-                val.textContent = labelText;
+                if (val) val.textContent = labelText;
             }
 
             function updateLinkState(linkId, connected) {

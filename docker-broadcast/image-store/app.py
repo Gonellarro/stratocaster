@@ -1292,10 +1292,10 @@ def control_panel():
 
                 if (data.accuracy && data.accuracy <= 10) {
                     checks.gps = true;
-                    updateChecklistUI('chk-gps', true, 'Fijo (' + data.accuracy + 'm)');
-                } else {
-                    checks.gps = false;
-                    updateChecklistUI('chk-gps', false, data.accuracy ? 'Acc: ' + data.accuracy + 'm (Insuficiente)' : 'Sin Enlace');
+                    updateChecklistUI('chk-gps', 'ok', 'Fijo (' + data.accuracy + 'm)');
+                } else if (!checks.gps) {
+                    // Solo marcar como fallo si init_gps no lo habia confirmado previamente
+                    updateChecklistUI('chk-gps', 'ko', data.accuracy ? 'Acc: ' + data.accuracy + 'm (Insuficiente)' : 'Sin Enlace');
                 }
 
                 validateChecklist();
@@ -1366,14 +1366,26 @@ def control_panel():
                     updateChecklistUI('chk-gps', 'testing', 'Buscando satélites...');
                     logMessage('warn', 'GPS', 'Iniciando búsqueda activa de satélites GPS...');
                 } else if (data.status === 'gps_ok') {
-                    if (data.lat !== undefined && data.lat !== null) {
-                        handleMobileTelemetry(data);
+                    // Actualizar tabla, mini-cards y mapa con los datos del GPS
+                    if (data.lat !== undefined && data.lat !== null && data.lat !== 'null') {
+                        document.getElementById('td-m-lat').textContent = parseFloat(data.lat).toFixed(5);
+                        document.getElementById('td-m-lng').textContent = parseFloat(data.lng).toFixed(5);
+                        if (data.alt !== undefined && data.alt !== null && data.alt !== 'null') {
+                            document.getElementById('td-m-alt').textContent = parseFloat(data.alt).toFixed(1) + ' m';
+                            document.getElementById('mini-alt').textContent = parseFloat(data.alt).toFixed(1) + ' m';
+                        }
+                        document.getElementById('mini-gps').textContent = 'Acc: ' + (data.accuracy || '--') + 'm';
+                        // Actualizar mapa
+                        let latlng = [parseFloat(data.lat), parseFloat(data.lng)];
+                        markers.movil.setLatLng(latlng);
+                        paths.movil.addLatLng(latlng);
+                        map.setView(latlng, 15);
                     }
                     if (data.accuracy && data.accuracy <= 15) {
                         checks.gps = true;
                         updateChecklistUI('chk-gps', 'ok', 'Fijo (' + parseFloat(data.accuracy).toFixed(1) + 'm)');
                     } else {
-                        checks.gps = true; // Aceptamos como recibido, pero en advertencia
+                        checks.gps = true;
                         updateChecklistUI('chk-gps', 'warn', 'Fijo (' + parseFloat(data.accuracy || 0).toFixed(1) + 'm)');
                     }
                     logMessage('ok', 'GPS', 'Señal de GPS fijada (Precisión: ' + (data.accuracy || '--') + 'm).');
@@ -1587,12 +1599,7 @@ def control_panel():
                 
                 logMessage('ok', 'TEST', `${step.name} confirmado.`);
                 
-                if (step.id === 'chk-video') {
-                    // Detener el vídeo 4 segundos después de validarlo
-                    setTimeout(() => {
-                        sendCommand('test_video_off');
-                    }, 4000);
-                }
+                // (El test de vídeo se ha eliminado de la secuencia automática)
                 
                 // Esperar 0.5s y avanzar
                 setTimeout(() => {

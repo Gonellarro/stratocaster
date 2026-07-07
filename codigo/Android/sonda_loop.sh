@@ -13,16 +13,6 @@ OFFLINE_LOG="$HOME/imagenes/sonda_offline.log"
 ARMED_FLAG="$HOME/imagenes/sonda.armed"
 ABORT_FLAG="$HOME/imagenes/sonda.abort"
 
-# CONFIGURACIÓN DE CONEXIÓN Y SERVIDORES (Valores por defecto)
-#IMAGE_SERVER_URL="https://sondafotos.martivich.es"
-IMAGE_SERVER_URL="http://192.168.1.196:5000"
-
-#MQTT_HOST="sondafotos.martivich.es"
-MQTT_HOST="192.168.1.196"
-MQTT_PORT=1883
-MQTT_USER=""
-MQTT_PASS=""
-MQTT_TOPIC="sonda/camera"
 
 # Cargar variables de entorno y credenciales privadas desde 'sonda.env' si existe
 CONFIG_FILE="$(dirname "$0")/sonda.env"

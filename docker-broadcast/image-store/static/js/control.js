@@ -681,8 +681,12 @@ function validateChecklist() {
             btnReady.disabled = true;
             btnArm.disabled = true;
             btnAbort.disabled = false;
+        } else if (mission.state === 'lanzado') {
+            btnReady.disabled = true;
+            btnArm.disabled = true;
+            btnAbort.disabled = false; // Permitir abortar/parar la misión en vuelo
         } else {
-            // lanzado / recuperacion
+            // recuperacion
             btnReady.disabled = true;
             btnArm.disabled = true;
             btnAbort.disabled = true;

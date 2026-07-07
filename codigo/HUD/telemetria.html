@@ -617,14 +617,19 @@
         const urlParams = new URLSearchParams(window.location.search);
         const serverIP = urlParams.get('server') || window.location.hostname || '192.168.1.196';
         const mqttPort = urlParams.get('mqtt_port') || '9001';
-        const flaskPort = urlParams.get('flask_port') || '5000';
 
-        const useSSL = urlParams.get('ssl') === 'true' || serverIP.includes('.');
+        // Detectar si es un nombre de dominio (tiene letras) o una dirección IP local (solo números y puntos)
+        const isDomain = /[a-zA-Z]/.test(serverIP);
+        const useSSL = urlParams.get('ssl') === 'true' || isDomain;
         const wsProtocol = useSSL ? 'wss:' : 'ws:';
         const httpProtocol = useSSL ? 'https:' : 'http:';
 
+        // Si es un dominio, omitimos el puerto 5000 por defecto para ir por el Proxy Inverso (443)
+        const defaultFlaskPort = isDomain ? '' : '5000';
+        const flaskPort = urlParams.get('flask_port') || defaultFlaskPort;
+
         const mqttUrl = `${wsProtocol}//${serverIP}:${mqttPort}`;
-        const restUrl = `${httpProtocol}//${serverIP}${(flaskPort && flaskPort !== '80' && flaskPort !== '443') ? ':' + flaskPort : ''}/control_lanzamiento`;
+        const restUrl = `${httpProtocol}//${serverIP}${flaskPort ? ':' + flaskPort : ''}/control_lanzamiento`;
 
         const mqttUser = urlParams.get('mqtt_user') || 'admin';
         const mqttPass = urlParams.get('mqtt_pass') || 'AWLCxdfGxwohHF2qpScJLK9AbRAFxD';

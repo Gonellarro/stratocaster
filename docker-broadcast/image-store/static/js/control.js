@@ -675,27 +675,27 @@ function validateChecklist() {
         btnAbort.disabled = true;
     }
 
+
+
+    // SI LA MISIÓN YA HA INICIADO (estado diferente de 'espera'):
+    // Congelamos el estado de los controles. No evaluamos el checklist para no deshabilitar
+    // los botones si la sonda pierde temporalmente cobertura (al apagar WiFi / cambiar a 4G).
+    if (mission.state !== 'espera') {
+        btnReady.disabled = true;
+        if (mission.state === 'armando') {
+            btnArm.disabled = false;
+        } else {
+            btnArm.disabled = true;
+        }
+        return; // Salir sin evaluar isReady
+    }
+
     if (!isReady) {
         btnReady.disabled = true;
         btnArm.disabled = true;
     } else {
-        if (mission.state === 'espera') {
-            btnReady.disabled = false;
-            btnArm.disabled = true;
-        } else if (mission.state === 'armando') {
-            btnReady.disabled = true;
-            btnArm.disabled = false;
-        } else if (mission.state === 'cuenta_atras') {
-            btnReady.disabled = true;
-            btnArm.disabled = true;
-        } else if (mission.state === 'lanzado') {
-            btnReady.disabled = true;
-            btnArm.disabled = true;
-        } else {
-            // recuperacion
-            btnReady.disabled = true;
-            btnArm.disabled = true;
-        }
+        btnReady.disabled = false;
+        btnArm.disabled = true;
     }
 }
 

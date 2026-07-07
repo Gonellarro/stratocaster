@@ -837,7 +837,6 @@ function startNewMission() {
     }
 }
 
-// 8. Sincronización del Estado del Lanzamiento REST
 function pollLaunchStatus() {
     fetch('/control_lanzamiento')
         .then(r => r.json())
@@ -847,6 +846,19 @@ function pollLaunchStatus() {
             
             // Sincronizar Fases visuales
             updatePhaseIndicators(data.estado);
+
+            // Sincronizar Tiempo de Misión (arriba) con el servidor
+            if (data.timestamp_mision && data.timestamp_mision > 0) {
+                const elapsedMs = Date.now() - (data.timestamp_mision * 1000);
+                const hours = Math.floor(elapsedMs / 3600000);
+                const minutes = Math.floor((elapsedMs % 3600000) / 60000);
+                const seconds = Math.floor((elapsedMs % 60000) / 1000);
+                
+                const pad = (n) => String(n).padStart(2, '0');
+                document.getElementById('mission-time').textContent = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+            } else {
+                document.getElementById('mission-time').textContent = '00:00:00';
+            }
 
             // Sincronizar reloj central
             const clock = document.getElementById('countdown-clock');
@@ -890,20 +902,7 @@ function updatePhaseIndicators(estado) {
     }
 }
 
-// Cronómetro ascendente tras el despegue
-let missionSeconds = 0;
-setInterval(() => {
-    if (mission.state === 'lanzado') {
-        missionSeconds++;
-        const hrs = String(Math.floor(missionSeconds / 3600)).padStart(2, '0');
-        const mins = String(Math.floor((missionSeconds % 3600) / 60)).padStart(2, '0');
-        const secs = String(missionSeconds % 60).padStart(2, '0');
-        document.getElementById('mission-time').textContent = `${hrs}:${mins}:${secs}`;
-    } else if (mission.state === 'espera') {
-        missionSeconds = 0;
-        document.getElementById('mission-time').textContent = '00:00:00';
-    }
-}, 1000);
+
 
 setInterval(pollLaunchStatus, 1000);
 

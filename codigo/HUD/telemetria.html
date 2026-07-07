@@ -206,7 +206,7 @@
 
         /* Contenedor del Reloj de Misión */
         .timer-container {
-            display: flex;
+            display: none;
             align-items: baseline;
             justify-content: center;
             margin-top: 5px;
@@ -466,10 +466,6 @@
         </div>
         <div class="top-center-title">
             <span class="mission-name-title">StratoCaster</span>
-        </div>
-        <div class="top-right-mission-time">
-            <span class="mission-time-label">TIEMPO TOTAL:</span>
-            <span id="hud-mission-time-val" class="mission-time-value">00:00:00</span>
         </div>
     </div>
 
@@ -796,22 +792,18 @@
                     const timerVal = document.getElementById('timer-val');
                     const countdownOverlay = document.getElementById('countdown-overlay');
                     const countdownOverlayNumber = document.getElementById('countdown-overlay-number');
-                    const hudMissionTimeVal = document.getElementById('hud-mission-time-val');
+                    const timerContainer = document.querySelector('.timer-container');
                     
-                    // 1. Actualizar el tiempo total de la misión (arriba a la derecha)
-                    if (data.timestamp_mision && data.timestamp_mision > 0) {
-                        const elapsedMs = Date.now() - (data.timestamp_mision * 1000);
-                        const hours = Math.floor(elapsedMs / 3600000);
-                        const minutes = Math.floor((elapsedMs % 3600000) / 60000);
-                        const seconds = Math.floor((elapsedMs % 60000) / 1000);
-                        
-                        const pad = (n) => n < 10 ? '0' + n : n;
-                        hudMissionTimeVal.textContent = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-                    } else {
-                        hudMissionTimeVal.textContent = '00:00:00';
+                    // Control de la visibilidad del reloj central (solo visible en cuenta atrás o lanzado)
+                    if (timerContainer) {
+                        if (data.estado === 'cuenta_atras' || data.estado === 'lanzado') {
+                            timerContainer.style.display = 'flex';
+                        } else {
+                            timerContainer.style.display = 'none';
+                        }
                     }
 
-                    // 2. Control del estado de la cuenta atrás
+                    // Control del estado de la cuenta atrás
                     if (data.estado === 'cuenta_atras') {
                         // Parar cronómetro si existiera
                         stopFlightTimer();
@@ -847,7 +839,7 @@
                                 startFlightTimer();
                             }
                         } else {
-                            // En espera / Abortado
+                            // En espera / Abortado / Armando
                             stopFlightTimer();
                             timerPrefix.textContent = 'T-';
                             timerPrefix.className = 'timer-prefix prefix-countdown';

@@ -624,7 +624,9 @@
         const defaultFlaskPort = isDomain ? '' : '5000';
         const flaskPort = urlParams.get('flask_port') || defaultFlaskPort;
 
-        const mqttUrl = `${wsProtocol}//${serverIP}:${mqttPort}`;
+        // Si es un dominio (SSL activo), conectamos al proxy de WebSockets en /mqtt (puerto 443).
+        // Si es una IP local (sin SSL), conectamos al puerto 9001 directo.
+        const mqttUrl = useSSL ? `${wsProtocol}//${serverIP}/mqtt` : `${wsProtocol}//${serverIP}:${mqttPort}`;
         const restUrl = `${httpProtocol}//${serverIP}${flaskPort ? ':' + flaskPort : ''}/control_lanzamiento`;
 
         const mqttUser = urlParams.get('mqtt_user') || 'admin';

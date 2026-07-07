@@ -69,7 +69,10 @@ let paths = {
 // 2. Conexión MQTT
 const serverIP = window.location.hostname;
 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const mqttUrl = `${protocol}//${serverIP}:9001`;
+
+// Si accedemos por HTTPS (producción/internet), pasamos por Nginx Proxy Manager en /mqtt (puerto 443).
+// Si accedemos por HTTP (IP local), conectamos directo al puerto 9001.
+const mqttUrl = protocol === 'wss:' ? `wss://${serverIP}/mqtt` : `ws://${serverIP}:9001`;
 
 logMessage('info', 'MQTT', 'Conectando a ' + mqttUrl + '...');
 client = mqtt.connect(mqttUrl, {

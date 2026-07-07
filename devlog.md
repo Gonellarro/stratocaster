@@ -155,6 +155,14 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
 * **Planificación Multi-Cámara para Twitch:** Diseñada la estructura para integrar múltiples cámaras (Sonda, Tierra, Dron) usando VDO.ninja como fuentes del navegador en OBS Studio.
 * **Migración y Autohospedaje (N100):** Planificada la sustitución de MediaMTX por una instancia dockerizada de VDO.ninja (servidor web + servidor WSS de señalización) en el servidor N100 para dar soporte P2P cifrado local e independiente.
 
+## 8. Redefinición de Secuencia de Despegue, Redes del Móvil y Proxies Seguros (07/07/2026)
+* **Secuencia de 3 Botones:** Redefinido el panel "Misión preparada" en el Dashboard para secuenciar el despegue en tres pasos lógicos: *Listo para el despegue*, *Iniciar cuenta atrás* y *Abortar lanzamiento*.
+* **Control de Redes en el Móvil:** Implementado el apagado automático de Wi-Fi en el móvil al armar la sonda (forzando la conexión a datos móviles 4G/5G) y la reactivación automática de Wi-Fi al abortar la secuencia para facilitar pruebas sucesivas en rampa.
+* **Congelación de Controles pre-vuelo:** Actualizada la lógica de validación de controles para congelar el estado de los botones una vez iniciada la misión (estado diferente de `espera`). Esto evita que los botones se deshabiliten cuando el móvil pierde temporalmente la conexión durante la transición de Wi-Fi a datos 4G.
+* **CORS en el Servidor Flask:** Habilitadas cabeceras CORS globales (`Access-Control-Allow-Origin: *`) en el backend Flask para evitar que el navegador interno de OBS Studio bloquee las peticiones de telemetría provenientes de un origen local (`file://`).
+* **WebSockets Seguros mediante subruta `/mqtt`:** Adaptado el HUD y el Dashboard para enrutar el tráfico WebSockets de Mosquitto a través de la ruta segura `/mqtt` en el puerto de internet estándar (443) con certificados SSL firmados (Let's Encrypt), evitando el bloqueo de contenido mixto de los navegadores.
+* **Estado Actual (Pendiente):** Nginx Proxy Manager responde con `502 Bad Gateway` al intentar enrutar la localización `/mqtt` al puerto `9001` de Mosquitto en el N100, a pesar de que el cortafuegos UFW del servidor está desactivado y el puerto responde localmente. Queda pendiente investigar la causa de este enrutamiento interno de red.
+
 
 
 

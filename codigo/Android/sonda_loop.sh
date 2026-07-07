@@ -210,21 +210,44 @@ handle_command() {
             ;;
             
         "arm")
-            touch "$ARMED_FLAG"
+            # 1. Notificar armado por MQTT sobre WiFi antes de apagarlo
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "armed"}'
-            timeout 5 termux-tts-speak "Sonda Armada. Despegue inminente." 2>/dev/null
+            
+            echo "[🛰️ NET] Desactivando WiFi y cambiando a red de datos móviles..."
+            timeout 5 termux-tts-speak "Sonda Armada. Desactivando wifi y conectando a red de datos." 2>/dev/null
+            
+            # 2. Desactivar WiFi (vía Termux API y fallback Root)
+            termux-wifi-enable false &>/dev/null
+            su -c "svc wifi disable" &>/dev/null
+            
+            # 3. Esperar 8 segundos a que se asocie la red móvil 4G/5G
+            sleep 8
+            
+            # 4. Crear flag para salir del bucle de espera
+            touch "$ARMED_FLAG"
             ;;
             
         "abort")
             echo "[🚨 ABORTAR] Recibida orden de abortar lanzamiento..."
             rm -f "$ARMED_FLAG"
             touch "$ABORT_FLAG"
+            
             # Detener vídeo
             am force-stop flutter.vdo.ninja &>/dev/null
             am force-stop com.android.chrome &>/dev/null
             am force-stop com.wmspanel.larix_broadcaster &>/dev/null
+            
+            echo "[🛰️ NET] Reactivando WiFi para pruebas de rampa..."
+            timeout 5 termux-tts-speak "Lanzamiento abortado. Activando wifi y volviendo a modo de espera." 2>/dev/null
+            
+            # Reactivar WiFi (vía Termux API y fallback Root)
+            termux-wifi-enable true &>/dev/null
+            su -c "svc wifi enable" &>/dev/null
+            
+            # Esperar 5 segundos a que reconecte a la red WiFi local
+            sleep 5
+            
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "aborted"}'
-            timeout 5 termux-tts-speak "Lanzamiento abortado. Volviendo a modo de espera." 2>/dev/null
             ;;
     esac
 }

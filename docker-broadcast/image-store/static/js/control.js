@@ -664,32 +664,34 @@ function validateChecklist() {
     // Checklist de despegue requiere obligatoriamente los checks del móvil y sus sensores completados:
     const isReady = checks.movil && checks.gps && checks.battery && checks.sensors && checks.audio && checks.camera_foto;
     
+    // El botón de abortar siempre debe estar disponible si hay una misión en curso,
+    // permitiendo abortar de emergencia incluso si se pierden las conexiones (isReady = false).
+    if (mission.state === 'armando' || mission.state === 'cuenta_atras' || mission.state === 'lanzado') {
+        btnAbort.disabled = false;
+    } else {
+        btnAbort.disabled = true;
+    }
+
     if (!isReady) {
         btnReady.disabled = true;
         btnArm.disabled = true;
-        btnAbort.disabled = true;
     } else {
         if (mission.state === 'espera') {
             btnReady.disabled = false;
             btnArm.disabled = true;
-            btnAbort.disabled = true;
         } else if (mission.state === 'armando') {
             btnReady.disabled = true;
             btnArm.disabled = false;
-            btnAbort.disabled = false;
         } else if (mission.state === 'cuenta_atras') {
             btnReady.disabled = true;
             btnArm.disabled = true;
-            btnAbort.disabled = false;
         } else if (mission.state === 'lanzado') {
             btnReady.disabled = true;
             btnArm.disabled = true;
-            btnAbort.disabled = false; // Permitir abortar/parar la misión en vuelo
         } else {
             // recuperacion
             btnReady.disabled = true;
             btnArm.disabled = true;
-            btnAbort.disabled = true;
         }
     }
 }

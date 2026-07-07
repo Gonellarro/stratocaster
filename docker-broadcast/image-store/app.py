@@ -15,7 +15,8 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 LAUNCH_STATE = {
     'estado': 'espera',        # 'espera', 'armando', 'cuenta_atras', 'lanzado', 'recuperacion'
     'tiempo_restante': 0,
-    'timestamp_inicio': 0.0
+    'timestamp_inicio': 0.0,
+    'timestamp_mision': 0.0
 }
 
 # ------------------------------------------------------------------------------
@@ -49,15 +50,20 @@ def change_launch_status():
         LAUNCH_STATE['estado'] = 'armando'
         LAUNCH_STATE['tiempo_restante'] = 0
         LAUNCH_STATE['timestamp_inicio'] = 0.0
+        if LAUNCH_STATE['timestamp_mision'] == 0.0:
+            LAUNCH_STATE['timestamp_mision'] = time.time()
     elif action == 'ok':
         # La sonda responde con su estado OK. Arrancamos la cuenta atrás real.
         LAUNCH_STATE['estado'] = 'cuenta_atras'
         LAUNCH_STATE['timestamp_inicio'] = time.time()
         LAUNCH_STATE['tiempo_restante'] = 10
+        if LAUNCH_STATE['timestamp_mision'] == 0.0:
+            LAUNCH_STATE['timestamp_mision'] = time.time()
     elif action == 'abortar' or action == 'reset':
         LAUNCH_STATE['estado'] = 'espera'
         LAUNCH_STATE['tiempo_restante'] = 0
         LAUNCH_STATE['timestamp_inicio'] = 0.0
+        LAUNCH_STATE['timestamp_mision'] = 0.0
     elif action == 'finalizar':
         LAUNCH_STATE['estado'] = 'recuperacion'
         LAUNCH_STATE['tiempo_restante'] = 0

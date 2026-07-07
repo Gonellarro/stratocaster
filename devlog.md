@@ -149,5 +149,12 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
 * **Estructura Lateral Menú:** Ampliado el menú de la barra izquierda con los accesos directos simulados solicitados (Misión, Telemetría, Mapa, Cámara, Meshtastic, Registros, y Configuración).
 * **Corrección de Warning Falso:** Excluido el enlace de LoRa (puenteado) en el cálculo global del estado general del header, solucionando el falso aviso cuando el móvil está conectado correctamente.
 
+## 7. Próximos Pasos: Arquitectura de Streaming Multi-Cámara y VDO.ninja
+* **Automatización de VDO.ninja en el Despegue:** Configurada la activación automática del streaming al pasar a la Fase 1 (Ignición) mediante intents de Chrome.
+* **Optimización de Parámetros de Cámara:** Implementados parámetros de URL (`&webcam`, `&facing=back`, `&autostart`, `&noaudio`, `&videobitrate=1000`, `&quality=2`, `&nopreview` y `&clean`) para forzar la cámara trasera, omitir los diálogos de selección de pantalla y la sala de preparación previa.
+* **Planificación Multi-Cámara para Twitch:** Diseñada la estructura para integrar múltiples cámaras (Sonda, Tierra, Dron) usando VDO.ninja como fuentes del navegador en OBS Studio.
+* **Migración y Autohospedaje (N100):** Planificada la sustitución de MediaMTX por una instancia dockerizada de VDO.ninja (servidor web + servidor WSS de señalización) en el servidor N100 para dar soporte P2P cifrado local e independiente.
+
+
 
 

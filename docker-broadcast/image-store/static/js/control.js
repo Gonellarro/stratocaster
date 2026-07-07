@@ -360,6 +360,11 @@ function handleSondaEvent(data) {
         logMessage('err', 'CÁMARA', 'Error al disparar la cámara o procesar con llama.cpp.');
     } else if (data.status === 'armed') {
         logMessage('ok', 'MISIÓN', '¡Sonda Armada! Bloqueando cambios terrestres.');
+        fetch('/control_lanzamiento', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'ok' })
+        });
     }
     validateChecklist();
 }
@@ -660,7 +665,7 @@ function validateChecklist() {
     // Checklist de despegue requiere obligatoriamente los checks del móvil y sus sensores completados:
     const isReady = checks.movil && checks.gps && checks.battery && checks.sensors && checks.audio && checks.camera_foto;
     
-    if (isReady && mission.state === 'espera') {
+    if (isReady && (mission.state === 'espera' || mission.state === 'armando')) {
         btn.disabled = false;
     } else {
         btn.disabled = true;

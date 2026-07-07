@@ -11,10 +11,14 @@
 TARGET_IMG="$HOME/imagenes/foto.jpg"
 OFFLINE_LOG="$HOME/imagenes/sonda_offline.log"
 ARMED_FLAG="$HOME/imagenes/sonda.armed"
+ABORT_FLAG="$HOME/imagenes/sonda.abort"
 
 # CONFIGURACIÓN DE CONEXIÓN Y SERVIDORES (Valores por defecto)
-IMAGE_SERVER_URL="https://sondafotos.martivich.es"
-MQTT_HOST="sondafotos.martivich.es"
+#IMAGE_SERVER_URL="https://sondafotos.martivich.es"
+IMAGE_SERVER_URL="http://192.168.1.196:5000"
+
+#MQTT_HOST="sondafotos.martivich.es"
+MQTT_HOST="192.168.1.196"
 MQTT_PORT=1883
 MQTT_USER=""
 MQTT_PASS=""
@@ -220,6 +224,18 @@ handle_command() {
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "armed"}'
             timeout 5 termux-tts-speak "Sonda Armada. Despegue inminente." 2>/dev/null
             ;;
+            
+        "abort")
+            echo "[🚨 ABORTAR] Recibida orden de abortar lanzamiento..."
+            rm -f "$ARMED_FLAG"
+            touch "$ABORT_FLAG"
+            # Detener vídeo
+            am force-stop flutter.vdo.ninja &>/dev/null
+            am force-stop com.android.chrome &>/dev/null
+            am force-stop com.wmspanel.larix_broadcaster &>/dev/null
+            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "aborted"}'
+            timeout 5 termux-tts-speak "Lanzamiento abortado. Volviendo a modo de espera." 2>/dev/null
+            ;;
     esac
 }
 
@@ -254,10 +270,9 @@ while [ ! -f "$ARMED_FLAG" ]; do
     COUNTER=$((COUNTER + 1))
 done
 
-# Matar el receptor de comandos de fondo para bloquear control remoto durante el vuelo
-kill -9 "$SUB_PID" 2>/dev/null
-pkill -9 -P "$SUB_PID" 2>/dev/null
+# Borrar flag de armado para estar listos para la secuencia
 rm -f "$ARMED_FLAG"
+rm -f "$ABORT_FLAG"
 
 # ==============================================================================
 # FASE 1: VUELO EN DIRECTO (STREAMING Y MONITOREO DE ALTITUD)
@@ -276,6 +291,18 @@ START_TIME=$(date +%s)
 TIMEOUT_SAFETY=600
 
 while true; do
+    # Verificar si el operador ha enviado orden de abortar lanzamiento
+    if [ -f "$ABORT_FLAG" ]; then
+        echo "[🚨 ABORTAR] Flag de aborto detectado. Limpiando y reiniciando script..."
+        rm -f "$ABORT_FLAG"
+        # Detener vídeo
+        am force-stop flutter.vdo.ninja &>/dev/null
+        am force-stop com.android.chrome &>/dev/null
+        am force-stop com.wmspanel.larix_broadcaster &>/dev/null
+        # Reiniciar script desde cero
+        exec "$0" "$@"
+    fi
+
     echo "[$(date +%T)] 📍 Midiendo altitud de vuelo..."
     
     LOC_JSON=$(get_gps_location)
@@ -312,6 +339,10 @@ while true; do
     
     sleep 5
 done
+
+# Detener el receptor de comandos MQTT de fondo para bloquear control remoto durante el vuelo autónomo
+kill -9 "$SUB_PID" 2>/dev/null
+pkill -9 -P "$SUB_PID" 2>/dev/null
 
 # Detener retransmisión de vídeo
 echo "[🔌 VIDEO] Deteniendo transmisión de vídeo en directo..."

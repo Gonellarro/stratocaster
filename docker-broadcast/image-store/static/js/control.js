@@ -360,11 +360,6 @@ function handleSondaEvent(data) {
         logMessage('err', 'CÁMARA', 'Error al disparar la cámara o procesar con llama.cpp.');
     } else if (data.status === 'armed') {
         logMessage('ok', 'MISIÓN', '¡Sonda Armada! Bloqueando cambios terrestres.');
-        fetch('/control_lanzamiento', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'ok' })
-        });
     }
     validateChecklist();
 }
@@ -660,15 +655,38 @@ function updateGeneralStatusLarge() {
 }
 
 function validateChecklist() {
-    const btn = document.getElementById('btn-arm');
+    const btnReady = document.getElementById('btn-ready');
+    const btnArm = document.getElementById('btn-arm');
+    const btnAbort = document.getElementById('btn-abort');
     
+    if (!btnReady || !btnArm || !btnAbort) return;
+
     // Checklist de despegue requiere obligatoriamente los checks del móvil y sus sensores completados:
     const isReady = checks.movil && checks.gps && checks.battery && checks.sensors && checks.audio && checks.camera_foto;
     
-    if (isReady && (mission.state === 'espera' || mission.state === 'armando')) {
-        btn.disabled = false;
+    if (!isReady) {
+        btnReady.disabled = true;
+        btnArm.disabled = true;
+        btnAbort.disabled = true;
     } else {
-        btn.disabled = true;
+        if (mission.state === 'espera') {
+            btnReady.disabled = false;
+            btnArm.disabled = true;
+            btnAbort.disabled = true;
+        } else if (mission.state === 'armando') {
+            btnReady.disabled = true;
+            btnArm.disabled = false;
+            btnAbort.disabled = false;
+        } else if (mission.state === 'cuenta_atras') {
+            btnReady.disabled = true;
+            btnArm.disabled = true;
+            btnAbort.disabled = false;
+        } else {
+            // lanzado / recuperacion
+            btnReady.disabled = true;
+            btnArm.disabled = true;
+            btnAbort.disabled = true;
+        }
     }
 }
 
@@ -733,25 +751,36 @@ function sendCommand(cmdName) {
     console.log('MQTT Publish sonda/comando:', cmdName);
 }
 
-function armLaunch() {
-    logMessage('warn', 'MISIÓN', 'Armando la sonda e iniciando cuenta atrás para el despegue...');
+function readyLaunch() {
+    logMessage('warn', 'MISIÓN', 'Preparando despegue: Armando la sonda e iniciando señal de vídeo...');
     
-    // Enviar arm al móvil
+    // Enviar arm al móvil por MQTT para iniciar Fase 1
     sendCommand('arm');
 
-    // Avisar a Flask para ponerlo en cuenta atrás
+    // Avisar a Flask para registrar el inicio de misión
     fetch('/control_lanzamiento', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'armar' })
-    });
+    }).then(validateChecklist);
+}
+
+function startCountdown() {
+    logMessage('warn', 'MISIÓN', 'Iniciando la cuenta atrás para el lanzamiento en el HUD...');
+    
+    // Avisar a Flask para arrancar el segundero de la cuenta atrás
+    fetch('/control_lanzamiento', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'ok' })
+    }).then(validateChecklist);
 }
 
 function abortLaunch() {
     logMessage('err', 'MISIÓN', '¡ALERTA! Secuencia de lanzamiento abortada por el operador.');
     
-    // Detener vídeo en móvil
-    sendCommand('test_video_off');
+    // Detener vídeo en móvil y resetear script
+    sendCommand('abort');
 
     // Reiniciar estados locales
     isTesting = false;
@@ -769,7 +798,7 @@ function abortLaunch() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'abortar' })
-    });
+    }).then(validateChecklist);
 }
 
 function triggerBuzzer() {
@@ -818,11 +847,13 @@ function pollLaunchStatus() {
             if (data.estado === 'cuenta_atras') {
                 clock.textContent = '00:00:' + String(data.tiempo_restante).padStart(2, '0');
                 clock.className = 'countdown-value active';
-                document.getElementById('btn-arm').disabled = true;
             } else {
                 clock.textContent = '00:00:10';
                 clock.className = 'countdown-value';
             }
+            
+            // Actualizar botones de control según el nuevo estado
+            validateChecklist();
         });
 }
 

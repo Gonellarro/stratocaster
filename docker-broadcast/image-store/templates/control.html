@@ -158,12 +158,13 @@
 
                 <!-- Cuenta atrás -->
                 <div class="panel">
-                    <div class="panel-title">Listo para el despegue</div>
+                    <div class="panel-title">Misión preparada</div>
                     <div class="countdown-area">
                         <div id="countdown-clock" class="countdown-value">00:00:10</div>
                     </div>
-                    <button id="btn-arm" class="btn btn-red" style="width: 100%;" onclick="armLaunch()" disabled>🚀 INICIAR CUENTA ATRÁS</button>
-                    <button id="btn-abort" class="btn" style="width: 100%; margin-top: 0.5rem; background-color: #ef4444;" onclick="abortLaunch()">🚨 ABORTAR LANZAMIENTO</button>
+                    <button id="btn-ready" class="btn" style="width: 100%; background-color: #1e3b8a;" onclick="readyLaunch()" disabled>📋 LISTO PARA EL DESPEGUE</button>
+                    <button id="btn-arm" class="btn btn-red" style="width: 100%; margin-top: 0.5rem;" onclick="startCountdown()" disabled>🚀 INICIAR CUENTA ATRÁS</button>
+                    <button id="btn-abort" class="btn" style="width: 100%; margin-top: 0.5rem; background-color: #ef4444;" onclick="abortLaunch()" disabled>🚨 ABORTAR LANZAMIENTO</button>
                 </div>
 
                 <!-- Estado General de rampa -->

@@ -372,34 +372,33 @@ am force-stop com.wmspanel.larix_broadcaster &>/dev/null
 sleep 2
 
 # ==============================================================================
-# FASE 2: CAPTURA DE IMÁGENES AUTÓNOMA Y TELEMETRÍA (SIN IA LOCAL)
+# FASE 2: CAPTURA DE IMÁGENES AUTÓNOMA Y TELEMETRÍA (INTELIGENTE)
 # ==============================================================================
 echo "====================================================="
-echo "  [FASE 2] Iniciando bucle de captura autónoma ligera..."
+echo "  [FASE 2] Iniciando bucle de captura autónoma inteligente..."
 echo "  Destino de capturas locales: ~/imagenes/"
-echo "  Subida de fotos e información cada $TIEMPO s"
+echo "  Telemetría cada 5s | Fotos cada 60s (si hay cobertura)"
 echo "====================================================="
 
+VIDEO_RUNNING=0
+CICLO=0
+PHOTO_INTERVAL=60  # Intervalo de fotos en segundos
+PHOTO_CYCLES=$((PHOTO_INTERVAL / 5))
+if [ "$PHOTO_CYCLES" -lt 1 ]; then PHOTO_CYCLES=1; fi
+
 while true; do
-    echo "[$(date +%T)] 📸 Capturando frame desde el sensor óptico..."
-    
-    termux-camera-photo -c 0 "$TARGET_IMG"
-    
-    if [ ! -f "$TARGET_IMG" ]; then
-        echo "[❌ ERROR] No se pudo generar la imagen. Reintentando en 5s..."
-        sleep 5
-        continue
+    # 1. Comprobar si hay cobertura de red real contra el Broker MQTT
+    if nc -z -w 2 "$MQTT_HOST" "$MQTT_PORT" &>/dev/null; then
+        COBERTURA=1
+    else
+        COBERTURA=0
     fi
 
-    # Definir texto descriptivo genérico (IA eliminada del móvil)
-    TEXTO_DETECTADO="Captura en tiempo real - Sonda Stratocaster"
-
-    # Geolocalizar
+    # Geolocalizar (leído en cada ciclo de 5s)
     LAT="null"
     LNG="null"
     ALT="null"
     ACC="null"
-    
     LOC_JSON=$(get_gps_location)
     if [ -n "$LOC_JSON" ] && [ "$LOC_JSON" != "{}" ]; then
         LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
@@ -408,34 +407,99 @@ while true; do
         ACC=$(echo "$LOC_JSON" | jq -r '.accuracy // "null"')
     fi
 
-    # Subir foto original a la web
-    echo "[$(date +%T)] 📤 Subiendo foto original..."
-    UPLOAD_RESP=$(curl -s -F "file=@$TARGET_IMG" -F "texto=$TEXTO_DETECTADO" "$IMAGE_SERVER_URL/upload")
-    
-    if [ $? -eq 0 ] && [ -n "$UPLOAD_RESP" ] && [[ "$UPLOAD_RESP" != *"Error"* ]]; then
-        FILENAME="$UPLOAD_RESP"
-        URL_COMPLETA="$IMAGE_SERVER_URL/images/$FILENAME"
-        echo "[✅ OK] Subida exitosa: $URL_COMPLETA"
-        
-        # Publicar JSON MQTT en sonda/camera
+    # 2. Gestión dinámica de conectividad en vuelo
+    if [ "$COBERTURA" -eq 1 ]; then
+        # Con cobertura: Si el vídeo estaba apagado, lo encendemos para el directo
+        if [ "$VIDEO_RUNNING" -eq 0 ]; then
+            echo "[🛰️ NET] Conexión recuperada. Reanudando vídeo en directo..."
+            am start -a android.intent.action.VIEW -d "https://vdo.ninja/?push=sonda_stratocaster&webcam&facing=back&autostart&noaudio&videobitrate=1000&quality=2&nopreview&clean&forcelandscape" &>/dev/null
+            VIDEO_RUNNING=1
+            sleep 2
+        fi
+
+        # Enviar telemetría continua de alta velocidad (cada 5s)
+        BAT_STATUS=$(termux-battery-status)
+        BAT_LEVEL=$(echo "$BAT_STATUS" | jq -r '.percentage // 100')
+        BAT_TEMP=$(echo "$BAT_STATUS" | jq -r '.temperature // 25')
+
         PAYLOAD=$(jq -n \
-          --arg txt "$TEXTO_DETECTADO" \
-          --arg url "$URL_COMPLETA" \
+          --argjson level "$BAT_LEVEL" \
+          --argjson temp "$BAT_TEMP" \
           --argjson lat "$LAT" \
           --argjson lng "$LNG" \
           --argjson alt "$ALT" \
-          '{texto: $txt, url_imagen: $url, lat: $lat, lng: $lng, alt: $alt}')
+          --argjson accuracy "$ACC" \
+          '{"status": "diagnostico", "level": $level, "temp": $temp, "lat": $lat, "lng": $lng, "alt": $alt, "accuracy": $accuracy}')
 
-        mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$MQTT_TOPIC" -m "$PAYLOAD"
-        echo "[✅ OK] Telemetría y foto publicadas por MQTT."
+        mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m "$PAYLOAD" &>/dev/null &
+        echo "[🛰️ NET] [$(date +%T)] Telemetría enviada por MQTT."
     else
-        echo "[❌ ERROR] Falló la subida de foto: $UPLOAD_RESP"
-        # Guardar en log local offline
-        echo "[$(date +%Y-%m-%d\ %H:%M:%S)] [OFFLINE] Lat: $LAT, Lng: $LNG, Alt: $ALT" >> "$OFFLINE_LOG"
+        # Sin cobertura: Si el directo de Chrome está corriendo, lo matamos para salvar batería
+        if [ "$VIDEO_RUNNING" -eq 1 ]; then
+            echo "[🛰️ NET] Conexión perdida. Apagando vídeo para conservar batería..."
+            am force-stop flutter.vdo.ninja &>/dev/null
+            am force-stop com.android.chrome &>/dev/null
+            am force-stop com.wmspanel.larix_broadcaster &>/dev/null
+            VIDEO_RUNNING=0
+        fi
     fi
 
-    echo "[$(date +%T)] Ciclo completado. Esperando $TIEMPO segundos..."
-    echo "====================================================="
-    
-    sleep $TIEMPO
+    # 3. Captura y registro de fotos en alta resolución (cada 60 segundos)
+    if [ $((CICLO % PHOTO_CYCLES)) -eq 0 ]; then
+        echo "[$(date +%T)] 📸 Capturando frame autónomo de alta resolución..."
+
+        # Si la cámara física está ocupada por el directo, pausar Chrome 2s
+        if [ "$VIDEO_RUNNING" -eq 1 ]; then
+            am force-stop com.android.chrome &>/dev/null
+            am force-stop flutter.vdo.ninja &>/dev/null
+            sleep 2
+        fi
+
+        rm -f "$TARGET_IMG"
+        termux-camera-photo -c 0 "$TARGET_IMG"
+
+        # Reanudar directo tras el disparo si debe seguir activo
+        if [ "$VIDEO_RUNNING" -eq 1 ]; then
+            am start -a android.intent.action.VIEW -d "https://vdo.ninja/?push=sonda_stratocaster&webcam&facing=back&autostart&noaudio&videobitrate=1000&quality=2&nopreview&clean&forcelandscape" &>/dev/null
+        fi
+
+        if [ -f "$TARGET_IMG" ]; then
+            # Guardar copia física con timestamp en el almacenamiento local del teléfono
+            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+            LOCAL_COPY="$HOME/imagenes/sonda_$TIMESTAMP.jpg"
+            cp "$TARGET_IMG" "$LOCAL_COPY"
+
+            TEXTO_DETECTADO="Captura autónoma - Altitud: $ALT m"
+
+            if [ "$COBERTURA" -eq 1 ]; then
+                echo "[$(date +%T)] 📤 Subiendo foto original al servidor..."
+                UPLOAD_RESP=$(curl -s -F "file=@$TARGET_IMG" -F "texto=$TEXTO_DETECTADO" "$IMAGE_SERVER_URL/upload")
+
+                if [ $? -eq 0 ] && [ -n "$UPLOAD_RESP" ] && [[ "$UPLOAD_RESP" != *"Error"* ]]; then
+                    FILENAME="$UPLOAD_RESP"
+                    URL_COMPLETA="$IMAGE_SERVER_URL/images/$FILENAME"
+                    echo "[✅ OK] Subida exitosa: $URL_COMPLETA"
+
+                    PAYLOAD=$(jq -n \
+                      --arg txt "$TEXTO_DETECTADO" \
+                      --arg url "$URL_COMPLETA" \
+                      --argjson lat "$LAT" \
+                      --argjson lng "$LNG" \
+                      --argjson alt "$ALT" \
+                      '{texto: $txt, url_imagen: $url, lat: $lat, lng: $lng, alt: $alt}')
+
+                    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$MQTT_TOPIC" -m "$PAYLOAD"
+                else
+                    echo "[❌ ERROR] Falló la subida de foto: $UPLOAD_RESP"
+                    echo "[$(date +%Y-%m-%d\ %H:%M:%S)] [OFFLINE_ERR] Lat: $LAT, Lng: $LNG, Alt: $ALT, Archivo: sonda_$TIMESTAMP.jpg" >> "$OFFLINE_LOG"
+                fi
+            else
+                echo "[🛰️ NET] Sin cobertura. Guardada localmente: sonda_$TIMESTAMP.jpg"
+                echo "[$(date +%Y-%m-%d\ %H:%M:%S)] [OFFLINE_SAVE] Lat: $LAT, Lng: $LNG, Alt: $ALT, Archivo: sonda_$TIMESTAMP.jpg" >> "$OFFLINE_LOG"
+            fi
+        fi
+    fi
+
+    sleep 5
+    CICLO=$((CICLO + 1))
 done

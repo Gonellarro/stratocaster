@@ -505,7 +505,7 @@ body {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    transform: rotate(-90deg) scale(2); /* Rotar -90º y escalar para llenar el contenedor en horizontal */
+    transform: rotate(-90deg) scale(1); /* Rotar -90º y escalar para llenar el contenedor en horizontal */
 }
 .camera-timestamp { font-size: 0.65rem; color: var(--text-muted); margin-top: 0.35rem; }
 .camera-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }

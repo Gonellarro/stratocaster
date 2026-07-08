@@ -48,11 +48,11 @@
         <!-- 1. Left Sidebar -->
         <div class="sidebar">
             <ul class="menu-list">
-                <li class="menu-item active"><a href="#">📊 Dashboard</a></li>
+                <li class="menu-item active"><a href="{{ url_for('control_panel') }}">📊 Dashboard</a></li>
                 <li class="menu-item"><a href="#">📋 Misión</a></li>
                 <li class="menu-item"><a href="#">⚡ Telemetría</a></li>
                 <li class="menu-item"><a href="#">📍 Mapa</a></li>
-                <li class="menu-item"><a href="#">📸 Cámara</a></li>
+                <li class="menu-item"><a href="{{ url_for('list_photos') }}">📸 Cámara</a></li>
                 <li class="menu-item"><a href="#">📻 Meshtastic</a></li>
                 <li class="menu-item"><a href="#">📄 Registros</a></li>
                 <li class="menu-item"><a href="#">⚙️ Configuración</a></li>

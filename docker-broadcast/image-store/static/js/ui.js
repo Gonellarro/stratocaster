@@ -89,8 +89,8 @@ function switchCameraTab(tabName) {
         if (tabVideo) tabVideo.className = 'camera-tab active';
         if (viewer) viewer.className = 'camera-viewer video-mode';
         
-        // Asignar el stream HLS o WebRTC local
-        if (streamFrame) streamFrame.src = "https://vdo.ninja/?view=sonda_stream&clean";
+        // Asignar el stream WebRTC local/P2P matching el ID de la sonda
+        if (streamFrame) streamFrame.src = "https://vdo.ninja/?view=sonda_stratocaster&clean";
     }
 }
 

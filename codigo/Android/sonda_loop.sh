@@ -164,7 +164,10 @@ handle_command() {
             
             am force-stop com.android.chrome &>/dev/null
             am force-stop flutter.vdo.ninja &>/dev/null
-            sleep 1
+            # Borrar la foto anterior para no re-subir basura si falla la captura actual
+            rm -f "$TARGET_IMG"
+            # Esperar 2 segundos para dar tiempo a Android a liberar la cámara física
+            sleep 2
             
             termux-camera-photo -c 0 "$TARGET_IMG"
             

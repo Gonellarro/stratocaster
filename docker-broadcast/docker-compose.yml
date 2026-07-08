@@ -1,15 +1,15 @@
 services:
-  mediamtx:
-    image: bluenviron/mediamtx:latest
-    container_name: mediamtx
-    restart: unless-stopped
-    ports:
-      - "8554:8554"     # RTSP
-      - "1935:1935"     # RTMP
-      - "8888:8888"     # HLS (Para ver streaming en navegadores si fuera necesario)
-      - "8889:8890/udp" # SRT (Mapea el puerto host 8889 al puerto interno 8890 de MediaMTX)
-      - "8889:8889/tcp" # WebRTC/WHIP Signalling (Para recibir streaming de VDO.ninja)
-      - "8189:8189/udp" # WebRTC/WHIP ICE (Requerido para la conexión WebRTC)
+  #mediamtx:
+  #  image: bluenviron/mediamtx:latest
+  #  container_name: mediamtx
+  #  restart: unless-stopped
+  #  ports:
+  #    - "8554:8554"     # RTSP
+  #    - "1935:1935"     # RTMP
+  #    - "8888:8888"     # HLS (Para ver streaming en navegadores si fuera necesario)
+  #    - "8889:8890/udp" # SRT (Mapea el puerto host 8889 al puerto interno 8890 de MediaMTX)
+  #    - "8889:8889/tcp" # WebRTC/WHIP Signalling (Para recibir streaming de VDO.ninja)
+  #    - "8189:8189/udp" # WebRTC/WHIP ICE (Requerido para la conexión WebRTC)
 
   image-store:
     build: ./image-store

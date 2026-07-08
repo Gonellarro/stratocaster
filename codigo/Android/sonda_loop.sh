@@ -12,6 +12,7 @@ TARGET_IMG="$HOME/imagenes/foto.jpg"
 OFFLINE_LOG="$HOME/imagenes/sonda_offline.log"
 ARMED_FLAG="$HOME/imagenes/sonda.armed"
 ABORT_FLAG="$HOME/imagenes/sonda.abort"
+VIDEO_FLAG="$HOME/imagenes/sonda.video"
 
 
 # Cargar variables de entorno y credenciales privadas desde 'sonda.env' si existe
@@ -146,12 +147,14 @@ handle_command() {
             
         "test_video_on")
             echo "[📹 VIDEO] Test de vídeo: Iniciando streaming..."
+            touch "$VIDEO_FLAG"
             am start -a android.intent.action.VIEW -d "https://vdo.ninja/?push=sonda_stratocaster&webcam&facing=back&autostart&noaudio&videobitrate=1000&quality=2&nopreview&clean" &>/dev/null
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "video_streaming_on"}'
             ;;
             
         "test_video_off")
             echo "[📹 VIDEO] Test de vídeo: Deteniendo streaming..."
+            rm -f "$VIDEO_FLAG"
             am force-stop flutter.vdo.ninja &>/dev/null
             am force-stop com.android.chrome &>/dev/null
             am force-stop com.wmspanel.larix_broadcaster &>/dev/null
@@ -162,6 +165,11 @@ handle_command() {
             echo "[📸 CÁMARA] Solicitud de test de foto..."
             mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "camera_testing"}'
             
+            RELAUNCH_VIDEO=0
+            if [ -f "$VIDEO_FLAG" ]; then
+                RELAUNCH_VIDEO=1
+            fi
+            
             am force-stop com.android.chrome &>/dev/null
             am force-stop flutter.vdo.ninja &>/dev/null
             # Borrar la foto anterior para no re-subir basura si falla la captura actual
@@ -170,6 +178,12 @@ handle_command() {
             sleep 2
             
             termux-camera-photo -c 0 "$TARGET_IMG"
+            
+            # Reanudar vídeo si estaba activo antes
+            if [ "$RELAUNCH_VIDEO" -eq 1 ]; then
+                echo "[📹 VIDEO] Reanudando transmisión de vídeo..."
+                am start -a android.intent.action.VIEW -d "https://vdo.ninja/?push=sonda_stratocaster&webcam&facing=back&autostart&noaudio&videobitrate=1000&quality=2&nopreview&clean&forcelandscape" &>/dev/null
+            fi
             
             if [ -f "$TARGET_IMG" ]; then
                 TEXTO_DETECTADO="Captura de verificación de cámara (OK)"
@@ -228,6 +242,7 @@ handle_command() {
             echo "[🚨 ABORTAR] Recibida orden de abortar lanzamiento..."
             rm -f "$ARMED_FLAG"
             touch "$ABORT_FLAG"
+            rm -f "$VIDEO_FLAG"
             
             # Detener vídeo
             am force-stop flutter.vdo.ninja &>/dev/null
@@ -251,6 +266,7 @@ echo "  Suscrito a sonda/comando. Esperando diagnóstico..."
 echo "====================================================="
 
 rm -f "$ARMED_FLAG"
+rm -f "$VIDEO_FLAG"
 
 # Suscriptor MQTT de fondo
 (
@@ -286,7 +302,7 @@ echo "  Transmitiendo vídeo en directo y telemetría de rampa..."
 echo "====================================================="
 
 # Arrancar el vídeo en directo de forma automática en el despegue (cámara trasera, autostart, sin audio y bitrate controlado)
-# am start -a android.intent.action.VIEW -d "https://vdo.ninja/?push=sonda_stratocaster&webcam&facing=back&autostart&noaudio&videobitrate=1000&quality=2&nopreview&clean" &>/dev/null
+touch "$VIDEO_FLAG"
 am start -a android.intent.action.VIEW -d "https://vdo.ninja/?push=sonda_stratocaster&webcam&facing=back&autostart&noaudio&videobitrate=1000&quality=2&nopreview&clean&forcelandscape" &>/dev/null
 sleep 10
 
@@ -298,6 +314,7 @@ while true; do
     if [ -f "$ABORT_FLAG" ]; then
         echo "[🚨 ABORTAR] Flag de aborto detectado. Limpiando y reiniciando script..."
         rm -f "$ABORT_FLAG"
+        rm -f "$VIDEO_FLAG"
         # Detener vídeo
         am force-stop flutter.vdo.ninja &>/dev/null
         am force-stop com.android.chrome &>/dev/null

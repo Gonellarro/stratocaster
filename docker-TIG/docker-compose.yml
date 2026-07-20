@@ -57,15 +57,17 @@ services:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_USER}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
       - GF_INSTALL_PLUGINS=marcusolsson-json-datasource,pr0ps-trackmap-panel
-      - INFLUX_TOKEN=${INFLUX_TOKEN}            # Disponible para datasource de Grafana
+      - INFLUX_TOKEN=${INFLUX_TOKEN}
       - INFLUX_ORG=${INFLUX_ORG}
       - INFLUX_BUCKET=${INFLUX_BUCKET}
+      - GF_SERVER_ROOT_URL=https://stratocaster.martivich.es/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_SECURITY_ALLOW_EMBEDDING=true
     ports:
       - '3000:3000'
     volumes:
       - ./grafana:/var/lib/grafana
-      - ./grafana/conf/grafana.ini:/etc/grafana/grafana.ini
-      - ./grafana/logs:/var/log/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
 
 
 

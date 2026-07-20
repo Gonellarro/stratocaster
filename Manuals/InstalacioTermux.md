@@ -10,7 +10,7 @@
 4. Cerca (Botó de lupa): Termux API. Descarregar. Instal·lar.
 
 # Instal·lar dependències
-- Instal·lar mosquitto, jq i curl. Escriure: `pkg install -y jq curl mosquitto`
+- Instal·lar mosquitto, jq i curl. Escriure: `pkg install -y jq curl mosquitto openssl`
 
 # Permisos especials
 

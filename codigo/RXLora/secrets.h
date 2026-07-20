@@ -10,7 +10,7 @@
 #define WIFI_PASSWORD   "Marti07Emma21Maria30"
 
 // Configuración de acceso al Bróker MQTT
-#define MQTT_SERVER     "sonda.martivich.es"
+#define MQTT_SERVER     "stratocaster.martivich.es"
 #define MQTT_PORT       1883
 #define MQTT_CLIENT_ID  "LoRaReceiver"
 

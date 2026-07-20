@@ -163,6 +163,19 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
 * **WebSockets Seguros mediante subruta `/mqtt`:** Adaptado el HUD y el Dashboard para enrutar el tráfico WebSockets de Mosquitto a través de la ruta segura `/mqtt` en el puerto de internet estándar (443) con certificados SSL firmados (Let's Encrypt), evitando el bloqueo de contenido mixto de los navegadores.
 * **Estado Actual (Pendiente):** Nginx Proxy Manager responde con `502 Bad Gateway` al intentar enrutar la localización `/mqtt` al puerto `9001` de Mosquitto en el N100, a pesar de que el cortafuegos UFW del servidor está desactivado y el puerto responde localmente. Queda pendiente investigar la causa de este enrutamiento interno de red.
 
+## 9. Modularización, Volúmenes en Desarrollo y Vuelo Autónomo Inteligente (08/07/2026)
+* **Modularización del Dashboard:** Dividido el monolito de `control.js` en 7 submódulos especializados (`state.js`, `ui.js`, `map.js`, `telemetry.js`, `checklist.js`, `launch.js` y `main.js`) en la carpeta `static/js/`, mejorando el mantenimiento y la escalabilidad.
+* **Enlace del Menú Lateral:** Conectados los botones de *Cámara* y *Dashboard* en el menú lateral para permitir una navegación fluida entre la consola de control y la galería de capturas.
+* **Volúmenes en Caliente (Docker):** Configurado un montaje de volumen de tipo *bind mount* (`./image-store:/app`) en el `docker-compose.yml` para evitar tener que reconstruir la imagen de Docker en cada actualización de archivos de estilo o de interfaz.
+* **Control de Giro CSS:** Corregido el giro de la cámara de vuelo a `-90deg` y adaptado con `scale(2)` y `object-fit: cover` para visualizarla en horizontal de forma nítida y a pantalla completa.
+* **Reconexión Automática de Vídeo (Fases 0/1):** Implementado un control de estado (`VIDEO_FLAG`) en el móvil para reanudar de forma automática la transmisión de VDO.ninja tras pausarla momentáneamente para tomar fotos en rampa y ascenso.
+* **Bucle de Vuelo Inteligente (Fase 2):** Rediseñado el bucle autónomo para optimizar batería y recursos en la estratosfera:
+  * Chequeo de cobertura continuo cada 5 segundos (vía `nc` a puerto de MQTT).
+  * Apagado automático de Chrome y del streaming al perder cobertura, y encendido automático en el descenso al recuperar señal.
+  * Envío de telemetría de alta velocidad (cada 5s) si hay señal.
+  * Disparo de fotos de alta resolución (cada 60s) con guardado local en el móvil con marcas de tiempo (`sonda_TIMESTAMP.jpg`).
+* **Nota de Instalación Pendiente:** El comando `nc` no está preinstalado en todos los entornos de Termux. Queda pendiente instalarlo mañana usando `pkg install connect-utils -y` en el móvil de pruebas.
+
 
 
 

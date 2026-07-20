@@ -243,13 +243,21 @@ void setup() {
   lastPacketMillis = millis();
 
   // WiFi utilizando constantes de secrets.h
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("[WiFi] Connecting");
-  while (WiFi.status() != WL_CONNECTED) {
+  unsigned long wifiStart = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - wifiStart < 15000UL) {
     delay(500);
     Serial.print(".");
   }
-  Serial.println("\n[WiFi] Connected — IP: " + WiFi.localIP().toString());
+  Serial.println();
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("[WiFi] Connected — IP: " + WiFi.localIP().toString());
+  } else {
+    Serial.println("[WiFi] Connection timeout. Continuing background reconnection...");
+  }
 
   // MQTT utilizando constantes de secrets.h
   mqttClient.setServer(MQTT_SERVER, MQTT_PORT);

@@ -1,0 +1,15 @@
+apiVersion: 1
+
+datasources:
+  - name: InfluxDB
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8086
+    uid: influxdb_ds
+    isDefault: true
+    jsonData:
+      version: Flux
+      organization: MartiHomelab
+      defaultBucket: telegraf_db
+    secureJsonData:
+      token: lGU6gtMnhxb3g4Aaqi27WyLzfOJnVM==

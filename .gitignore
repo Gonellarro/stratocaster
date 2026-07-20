@@ -6,7 +6,8 @@
 docker-TIG/influxdb/
 docker-TIG/mosquitto/data/
 docker-TIG/mosquitto/log/
-docker-TIG/grafana/
+docker-TIG/grafana/*
+!docker-TIG/grafana/provisioning/
 docker-broadcast/images/
 images/
 

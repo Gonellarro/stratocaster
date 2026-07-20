@@ -1,0 +1,725 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Dashboard amb les m\u00e8triques de la sonda LORA",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 1,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb_ds"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 21,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "basemap": {
+          "config": {},
+          "name": "Layer 0",
+          "type": "default"
+        },
+        "controls": {
+          "mouseWheelZoom": true,
+          "showAttribution": true,
+          "showDebug": false,
+          "showMeasure": false,
+          "showScale": true,
+          "showZoom": true
+        },
+        "layers": [
+          {
+            "config": {
+              "style": {
+                "color": {
+                  "fixed": "red"
+                },
+                "size": {
+                  "fixed": 3
+                }
+              }
+            },
+            "filterData": {
+              "id": "byRefId",
+              "options": "A"
+            },
+            "location": {
+              "latitude": "lat",
+              "longitude": "lng",
+              "mode": "coords"
+            },
+            "name": "Ruta ESP32 Lora",
+            "type": "route"
+          },
+          {
+            "config": {
+              "style": {
+                "color": {
+                  "fixed": "red"
+                },
+                "size": {
+                  "fixed": 5
+                }
+              }
+            },
+            "filterData": {
+              "id": "byRefId",
+              "options": "A"
+            },
+            "location": {
+              "latitude": "lat",
+              "longitude": "lng",
+              "mode": "coords"
+            },
+            "name": "Puntos Lora",
+            "tooltip": true,
+            "type": "markers"
+          },
+          {
+            "config": {
+              "style": {
+                "color": {
+                  "fixed": "cyan"
+                },
+                "size": {
+                  "fixed": 8
+                }
+              }
+            },
+            "filterData": {
+              "id": "byRefId",
+              "options": "B"
+            },
+            "location": {
+              "latitude": "lat",
+              "longitude": "lng",
+              "mode": "coords"
+            },
+            "name": "Fotos M\u00f3vil",
+            "tooltip": true,
+            "type": "markers"
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        },
+        "view": {
+          "allData": true,
+          "allLayers": true,
+          "id": "fit",
+          "lat": 0,
+          "lon": 0,
+          "shared": false,
+          "zoom": 15
+        }
+      },
+      "pluginVersion": "11.6.1",
+      "targets": [
+        {
+          "query": "from(bucket: \"telegraf_db\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"topic\"] == \"gps/data\")\n  |> filter(fn: (r) => r[\"_field\"] == \"lat\" or r[\"_field\"] == \"lng\")\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> keep(columns: [\"_time\", \"lat\", \"lng\"])",
+          "refId": "A"
+        },
+        {
+          "query": "from(bucket: \"telegraf_db\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"topic\"] == \"sonda/camera\")\n  |> filter(fn: (r) => r[\"_field\"] == \"lat\" or r[\"_field\"] == \"lng\")\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> filter(fn: (r) => exists r.lat and exists r.lng)\n  |> keep(columns: [\"_time\", \"lat\", \"lng\"])",
+          "refId": "B"
+        }
+      ],
+      "title": "Posici\u00f3n",
+      "type": "geomap"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb_ds"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.6.1",
+      "targets": [
+        {
+          "query": "from(bucket: \"telegraf_db\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"topic\"] == \"gps/data\")\n  |> filter(fn: (r) => r[\"_field\"] == \"altitude\")",
+          "refId": "A"
+        },
+        {
+          "query": "from(bucket: \"telegraf_db\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"topic\"] == \"sonda/camera\")\n  |> filter(fn: (r) => r[\"_field\"] == \"alt\")",
+          "refId": "B"
+        }
+      ],
+      "title": "Altitud",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb_ds"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.6.1",
+      "targets": [
+        {
+          "query": "from(bucket: \"telegraf_db\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"topic\"] == \"gps/data\")\n  |> filter(fn: (r) => r[\"_field\"] == \"speed\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Velocidad hist\u00f3rico",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb_ds"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 16
+      },
+      "id": 5,
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "pluginVersion": "11.6.1",
+      "targets": [
+        {
+          "query": "from(bucket: \"telegraf_db\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"topic\"] == \"gps/data\")\n  |> filter(fn: (r) => r[\"_field\"] == \"speed\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "Velocidad actual",
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb_ds"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "from": 0,
+                "result": {
+                  "index": 0,
+                  "text": "N"
+                },
+                "to": 22
+              },
+              "type": "range"
+            },
+            {
+              "options": {
+                "from": 23,
+                "result": {
+                  "index": 1,
+                  "text": "NE"
+                },
+                "to": 67
+              },
+              "type": "range"
+            },
+            {
+              "options": {
+                "from": 68,
+                "result": {
+                  "index": 2,
+                  "text": "E"
+                },
+                "to": 112
+              },
+              "type": "range"
+            },
+            {
+              "options": {
+                "from": 113,
+                "result": {
+                  "index": 3,
+                  "text": "SE"
+                },
+                "to": 157
+              },
+              "type": "range"
+            },
+            {
+              "options": {
+                "from": 158,
+                "result": {
+                  "index": 4,
+                  "text": "S"
+                },
+                "to": 202
+              },
+              "type": "range"
+            },
+            {
+              "options": {
+                "from": 203,
+                "result": {
+                  "index": 5,
+                  "text": "SW"
+                },
+                "to": 247
+              },
+              "type": "range"
+            },
+            {
+              "options": {
+                "from": 248,
+                "result": {
+                  "index": 6,
+                  "text": "W"
+                },
+                "to": 292
+              },
+              "type": "range"
+            },
+            {
+              "options": {
+                "from": 293,
+                "result": {
+                  "index": 7,
+                  "text": "NW"
+                },
+                "to": 337
+              },
+              "type": "range"
+            },
+            {
+              "options": {
+                "from": 338,
+                "result": {
+                  "index": 8,
+                  "text": "n"
+                },
+                "to": 360
+              },
+              "type": "range"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 16
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.6.1",
+      "targets": [
+        {
+          "query": "from(bucket: \"telegraf_db\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"topic\"] == \"gps/data\")\n  |> filter(fn: (r) => r[\"_field\"] == \"course\")\n  |> last()",
+          "refId": "A"
+        }
+      ],
+      "title": "Direcci\u00f3n",
+      "transformations": [
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "Rumbo_Entero",
+            "mode": "reduceRow",
+            "reduce": {
+              "include": [
+                "course {host=\"telegraf_srv\", topic=\"gps/data\"}"
+              ],
+              "reducer": "lastNotNull"
+            }
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "Rumbo_Entero"
+              ]
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb_ds"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto",
+              "wrapText": true
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "url_imagen"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "fit",
+                  "type": "image"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 350
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "Ver a tama\u00f1o completo \ud83d\udd0d",
+                    "url": "${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "texto"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 600
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "id": 10,
+      "options": {
+        "cellHeight": "large",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "pluginVersion": "11.6.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb_ds"
+          },
+          "query": "from(bucket: \"telegraf_db\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\")\n  |> filter(fn: (r) => r[\"topic\"] == \"sonda/camera\")\n  |> filter(fn: (r) => r[\"_field\"] == \"texto\" or r[\"_field\"] == \"url_imagen\")\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> keep(columns: [\"_time\", \"texto\", \"url_imagen\"])\n  |> sort(columns: [\"_time\"], desc: true)",
+          "refId": "A"
+        }
+      ],
+      "title": "Fotos y An\u00e1lisis de la IA (Sonda)",
+      "type": "table"
+    }
+  ],
+  "preload": false,
+  "refresh": "5s",
+  "schemaVersion": 41,
+  "tags": [],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Sonda LORA",
+  "uid": "efngceibqz9c0d",
+  "version": 21
+}

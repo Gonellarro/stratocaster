@@ -31,7 +31,7 @@ function updateLinkState(linkId, connected) {
         }
         if (chk) {
             chk.className = 'checklist-item ok';
-            chkVal.textContent = 'Conexión Estable';
+            chkVal.textContent = (linkId === 'lora') ? 'En Línea (868MHz)' : 'Conexión Estable';
         }
         if (linkId === 'movil') {
             const lastPingEl = document.getElementById('sys-last-ping');
@@ -45,8 +45,8 @@ function updateLinkState(linkId, connected) {
             badge.className = 'link-badge disconnected';
         }
         if (chk) {
-            // Si es LoRa o Meshtastic, mantenerlos en verde (omitidos/aprobados directamente)
-            if (linkId === 'lora' || linkId === 'meshtastic') {
+            // Solo Meshtastic permanece omitido directamente si no está conectado
+            if (linkId === 'meshtastic') {
                 chk.className = 'checklist-item ok';
                 chkVal.textContent = 'Omitido';
             } else {

@@ -198,10 +198,10 @@ function resetChecklistUI() {
         if (val) val.textContent = 'Pendiente';
     });
     
-    // Forzar LoRa y Meshtastic a verde directamente
-    checks.lora_telemetria = true;
+    // Meshtastic en verde como omitido por defecto
+    checks.lora_telemetria = false;
     checks.lora_meshtastic = true;
-    updateChecklistUI('chk-lora', 'ok', 'Omitido');
+    updateChecklistUI('chk-lora', false, 'Sin Enlace');
     updateChecklistUI('chk-meshtastic', 'ok', 'Omitido');
 }
 
@@ -221,12 +221,12 @@ setInterval(() => {
         }
     }
     
-    // LoRa Telemetría (timeout de 30s)
-    if (now - lastLoraPing > 30000) {
+    // LoRa Telemetría (timeout de 120s / 2 minutos para soportar cadencias de radio espaciadas)
+    if (now - lastLoraPing > 120000) {
         if (checks.lora_telemetria) {
             checks.lora_telemetria = false;
             updateLinkState('lora', false);
-            logMessage('err', 'CONEXIÓN', 'Receptor LoRa de Telemetría fuera de línea.');
+            logMessage('err', 'CONEXIÓN', 'Receptor LoRa de Telemetría fuera de línea (sin recepción por >2 min).');
         }
     }
 

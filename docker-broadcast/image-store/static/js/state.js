@@ -10,7 +10,7 @@ let mapCentered = false;
 // Checklist local status variables
 let checks = {
     movil: false,
-    lora_telemetria: true,
+    lora_telemetria: false,
     lora_meshtastic: true,
     camera_foto: false,
     camera_video: true,

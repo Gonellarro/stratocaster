@@ -611,23 +611,20 @@
     <script>
         // Extraer configuración dinámica de la URL
         const urlParams = new URLSearchParams(window.location.search);
-        const serverIP = urlParams.get('server') || window.location.hostname || '192.168.1.196';
+        // Si no se especifica parámetro ni hay hostname (ej: file://), usar el dominio público de internet por defecto
+        const serverIP = urlParams.get('server') || (window.location.hostname && window.location.hostname !== '' ? window.location.hostname : 'stratocaster.martivich.es');
         const mqttPort = urlParams.get('mqtt_port') || '9001';
 
         // Detectar si es un nombre de dominio (tiene letras) o una dirección IP local (solo números y puntos)
         const isDomain = /[a-zA-Z]/.test(serverIP);
-        const useSSL = urlParams.get('ssl') === 'true' || isDomain;
+        const useSSL = urlParams.get('ssl') === 'true' || isDomain || window.location.protocol === 'https:';
         const wsProtocol = useSSL ? 'wss:' : 'ws:';
         const httpProtocol = useSSL ? 'https:' : 'http:';
-
-        // Si es un dominio, omitimos el puerto 5000 por defecto para ir por el Proxy Inverso (443)
-        const defaultFlaskPort = isDomain ? '' : '5000';
-        const flaskPort = urlParams.get('flask_port') || defaultFlaskPort;
 
         // Si es un dominio (SSL activo), conectamos al proxy de WebSockets en /mqtt (puerto 443).
         // Si es una IP local (sin SSL), conectamos al puerto 9001 directo.
         const mqttUrl = useSSL ? `${wsProtocol}//${serverIP}/mqtt` : `${wsProtocol}//${serverIP}:${mqttPort}`;
-        const restUrl = `${httpProtocol}//${serverIP}${flaskPort ? ':' + flaskPort : ''}/control_lanzamiento`;
+        const restUrl = useSSL ? `${httpProtocol}//${serverIP}/control_lanzamiento` : `${httpProtocol}//${serverIP}:5000/control_lanzamiento`;
 
         const mqttUser = urlParams.get('mqtt_user') || 'admin';
         const mqttPass = urlParams.get('mqtt_pass') || 'AWLCxdfGxwohHF2qpScJLK9AbRAFxD';
@@ -720,24 +717,18 @@
                     launchpadLng = parseFloat(data.lng);
                 }
                 
-                // Procesar velocidad (llega en km/h o m/s)
-                let speedKmh = parseFloat(data.speed || 0); // Asumiendo que el script o telegraf calcula la velocidad
-                // Si la velocidad es 0 pero la sonda se mueve, podemos calcular velocidad estimada o usar la velocidad de GPS
-                // Para las pruebas, asumimos que viene en KM/H o simulamos una
-                if (speedKmh === 0 && lastAltitudeTime !== null) {
-                    // Simulación para ver movimiento en el velocímetro en rampa/vuelo básico
-                    speedKmh = Math.random() * 5 + 10;
-                }
-                
+                // Procesar velocidad real (KM/H) emitida por el receptor LoRa
+                let speedKmh = parseFloat(data.speed || 0);
                 updateGauge('ring-speed', speedKmh, 0, 120); // Mapeo velocidad máx 120 km/h
                 document.getElementById('val-speed').textContent = speedKmh.toFixed(1);
 
-                updateSondaLocation(parseFloat(data.lat), parseFloat(data.lng), parseFloat(data.altitude), parseFloat(data.accuracy));
+                let courseDeg = (data.course !== undefined && data.course !== null) ? parseFloat(data.course) : null;
+                updateSondaLocation(parseFloat(data.lat), parseFloat(data.lng), parseFloat(data.altitude || 0), parseFloat(data.accuracy || 0), courseDeg);
             }
         }
 
         // 4. Actualizar ubicación, calcular recorrido, rumbo, presión y actualizar el perfil de la curva
-        function updateSondaLocation(lat, lng, alt, accuracy) {
+        function updateSondaLocation(lat, lng, alt, accuracy, courseDeg = null) {
             // A. Altitud (M o KM estilo SpaceX)
             const altValEl = document.getElementById('val-alt');
             const altUnitEl = document.getElementById('val-alt-unit');
@@ -767,7 +758,10 @@
                 document.getElementById('val-recorrido').textContent = distanceKm.toFixed(2) + ' KM';
 
                 // D. Dirección (Rumbo en grados y cardinal)
-                const bearingDeg = getBearing(launchpadLat, launchpadLng, lat, lng);
+                let bearingDeg = courseDeg;
+                if (bearingDeg === null || isNaN(bearingDeg)) {
+                    bearingDeg = getBearing(launchpadLat, launchpadLng, lat, lng);
+                }
                 const cardinal = getCardinalDirection(bearingDeg);
                 document.getElementById('val-direccion').textContent = `${Math.round(bearingDeg)}° ${cardinal}`;
             }

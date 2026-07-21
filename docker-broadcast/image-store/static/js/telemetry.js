@@ -89,14 +89,17 @@ function handleLoraTelemetry(data) {
     document.getElementById('td-l-spd').textContent = data.speed !== undefined ? parseFloat(data.speed).toFixed(1) + ' km/h' : '--';
     document.getElementById('td-l-crs').textContent = data.course !== undefined ? data.course + '°' : '--';
     
-    // Si la sonda perdió cobertura, rellenar mini-cards usando datos de la telemetría LoRa
-    if (!checks.movil) {
-        if (data.altitude !== null) document.getElementById('mini-alt').textContent = parseFloat(data.altitude).toFixed(1) + ' m';
-        if (data.speed !== undefined) document.getElementById('mini-spd').textContent = parseFloat(data.speed).toFixed(1) + ' km/h';
-        if (data.course !== undefined) document.getElementById('mini-crs').textContent = getWindDirection(data.course) + ' (' + data.course + '°)';
+    // Si la sonda perdió cobertura móvil o aún no hay posición fija por 4G, alimentar visores principales con LoRa
+    const currentLat = document.getElementById('td-m-lat').textContent;
+    if (!checks.movil || currentLat === '--' || currentLat === '') {
+        if (data.lat !== null && data.lat !== undefined) document.getElementById('td-m-lat').textContent = parseFloat(data.lat).toFixed(5);
+        if (data.lng !== null && data.lng !== undefined) document.getElementById('td-m-lng').textContent = parseFloat(data.lng).toFixed(5);
+        if (data.altitude !== null && data.altitude !== undefined) document.getElementById('mini-alt').textContent = parseFloat(data.altitude).toFixed(1) + ' m';
+        if (data.speed !== undefined && data.speed !== null) document.getElementById('mini-spd').textContent = parseFloat(data.speed).toFixed(1) + ' km/h';
+        if (data.course !== undefined && data.course !== null) document.getElementById('mini-crs').textContent = getWindDirection(data.course) + ' (' + data.course + '°)';
     }
 
-    // Pintar en el mapa
+    // Pintar ruta y marcador rojo de LoRa en el mapa
     updateMapCoordinates('lora', data.lat, data.lng);
 }
 

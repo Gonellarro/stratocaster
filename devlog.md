@@ -174,8 +174,37 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
   * Apagado automático de Chrome y del streaming al perder cobertura, y encendido automático en el descenso al recuperar señal.
   * Envío de telemetría de alta velocidad (cada 5s) si hay señal.
   * Disparo de fotos de alta resolución (cada 60s) con guardado local en el móvil con marcas de tiempo (`sonda_TIMESTAMP.jpg`).
-* **Nota de Instalación Pendiente:** El comando `nc` no está preinstalado en todos los entornos de Termux. Queda pendiente instalarlo mañana usando `pkg install connect-utils -y` en el móvil de pruebas.
+---
 
+## 10. Robustecimiento de TX/RX LoRa, Subruteo NPM y Aprovisionamiento TIG (20/07/2026)
 
+### 🛰️ Emisor LoRa (`codigo/TXLora/`)
+* **Perfil Estratosférico `Airborne < 1G` (`gps_ublox`):**
+  * Diseñada la estructura empaquetada `UbxCfgNav5` de **36 bytes exactos** alineada con la especificación oficial de u-blox NEO-6.
+  * Aplicada la máscara `0x0001` para actualizar exclusivamente `dynModel = 6` (Airborne < 1G, que permite medir hasta 50 km de altitud) sin alterar otros parámetros del módulo.
+  * Optimizado el flujo de la UART a 9600 baudios filtrando tramas NMEA secundarias (`GLL`, `GSA`, `GSV`, `VTG`) y elevando la tasa de refresco a 5Hz.
+* **Watchdog de Doble Canal:**
+  * **Canal NMEA:** Detección de silencio en la UART (>6s) para re-ejecutar el ciclo de calibración ante fallos de conexión.
+  * **Canal Airborne:** Muestra periódica (*poll* cada 60s) para confirmar activamente que el módulo u-blox conserva el perfil *Airborne* y no se ha reiniciado al modo *Pedestrian* de fábrica debido a bajadas puntuales de tensión (*brownout*).
+* **Panel de Pruebas Web:** Servidor web integrado en `TXLora.ino` aislado mediante la directiva `#define ENABLE_WIFI_DEBUG_SERVER 1` para pruebas en banco de tierra (panel HTML de auto-refresco y endpoint `/data` en JSON).
 
+### 📡 Receptor LoRa (`codigo/RXLora/`)
+* **Compatibilidad de Protocolo:** Confirmado el parseo 1:1 de la trama delimitada (`lat,lng;date;time;altitude;course;speed`).
+* **Conexión WiFi No Bloqueante:** Modificada la inicialización en `setup()` para incluir un timeout de 15 segundos y activar la auto-reconexión en segundo plano (`WiFi.setAutoReconnect(true)`). Esto garantiza que el receptor siga recibiendo y procesando paquetes LoRa locales aunque la red WiFi no esté disponible al encenderlo.
+* **Actualización de Credenciales:** Actualizado `secrets.h` para dirigir las publicaciones MQTT a `stratocaster.martivich.es` en el puerto `1883`.
 
+### 🌐 Infraestructura Web, Proxy y Aprovisionamiento TIG (`docker-TIG/`)
+* **Unificación de Dominio (`stratocaster.martivich.es`):**
+  * Configurado Nginx Proxy Manager (NPM) para dar servicio a toda la infraestructura bajo un solo dominio:
+    * `/` → Dashboard Flask (`:5000`)
+    * `/grafana/` → Cuadro de mando de Grafana (`:3000`)
+    * `/mqtt` → Mosquitto WebSockets (`:9001`) con cabeceras `Upgrade` y `proxy_read_timeout 86400s`.
+  * Adaptado `docker-compose.yml` de `docker-TIG` con las variables de entorno `GF_SERVER_ROOT_URL`, `GF_SERVER_SERVE_FROM_SUB_PATH=true` y `GF_SECURITY_ALLOW_EMBEDDING=true`.
+* **Aprovisionamiento Automático de Grafana:**
+  * **Corrección de UIDs:** Corregidos los UIDs de datasources hardcodeados (`afngbg7x6dq80a` → `influxdb_ds`) en el JSON exportado del cuadro de mando (`Sonda LORA`).
+  * **Configuración automática:** Creadas las carpetas de aprovisionamiento `docker-TIG/grafana/provisioning/datasources/influxdb.yml` y `docker-TIG/grafana/provisioning/dashboards/` para que Grafana arranque en el servidor con el datasource InfluxDB y el dashboard **Sonda LORA** pre-cargados automáticamente.
+  * **Ajuste en `.gitignore`:** Actualizada la exclusión de `.gitignore` (`docker-TIG/grafana/*` y `!docker-TIG/grafana/provisioning/`) para que Git rastree la configuración de aprovisionamiento manteniendo aislada la persistencia.
+* **Despliegue y Resolución de Permisos en Servidor (`ubntsrv04TIG`):**
+  * Regenerados certificados SSL para Mosquitto (`openssl`).
+  * Corregida la propiedad del directorio SQLite de Grafana (`sudo chown -R 472:472 docker-TIG/grafana` / `chmod -R 777`).
+  * Desplegada y verificada la pila en el servidor en producción.

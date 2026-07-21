@@ -209,8 +209,11 @@ function resetChecklistUI() {
 setInterval(() => {
     const now = Date.now();
     
-    // Móvil (ping cada 15 segundos max)
-    if (now - lastSondaPing > 15000) {
+    // El timeout del teléfono debe ser más tolerante durante el lanzamiento/vuelo (35s)
+    // que en rampa (20s) para soportar la transición de red (Wi-Fi a 4G) y el arranque del vídeo.
+    const mobileTimeout = (mission.state !== 'espera') ? 35000 : 20000;
+    
+    if (now - lastSondaPing > mobileTimeout) {
         if (checks.movil) {
             checks.movil = false;
             updateLinkState('movil', false);
@@ -218,8 +221,8 @@ setInterval(() => {
         }
     }
     
-    // LoRa Telemetría
-    if (now - lastLoraPing > 15000) {
+    // LoRa Telemetría (timeout de 30s)
+    if (now - lastLoraPing > 30000) {
         if (checks.lora_telemetria) {
             checks.lora_telemetria = false;
             updateLinkState('lora', false);

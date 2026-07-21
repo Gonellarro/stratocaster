@@ -304,7 +304,7 @@ echo "====================================================="
 # Arrancar el vídeo en directo de forma automática en el despegue (cámara trasera, autostart, sin audio y bitrate controlado)
 touch "$VIDEO_FLAG"
 am start -a android.intent.action.VIEW -d "https://vdo.ninja/?push=sonda_stratocaster&webcam&facing=back&autostart&noaudio&videobitrate=1000&quality=2&nopreview&clean&forcelandscape" &>/dev/null
-sleep 10
+sleep 2
 
 START_TIME=$(date +%s)
 TIMEOUT_SAFETY=600
@@ -331,16 +331,15 @@ while true; do
     ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
     ACC=$(echo "$LOC_JSON" | jq -r '.accuracy // "null"')
     
-    if [ "$LAT" != "null" ]; then
-        GPS_PAYLOAD=$(jq -n \
-          --argjson lat "$LAT" \
-          --argjson lng "$LNG" \
-          --argjson alt "$ALT" \
-          --argjson acc "$ACC" \
-          '{lat: $lat, lng: $lng, altitude: $alt, accuracy: $acc}')
-        mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "gps/data" -m "$GPS_PAYLOAD"
-        echo "[📡 TELEMETRÍA] Enviada: Alt: $ALT m, Acc: $ACC m"
-    fi
+    # Enviar siempre el reporte de telemetría por MQTT (evita que el dashboard marque desconectado si no hay fix todavía)
+    GPS_PAYLOAD=$(jq -n \
+      --argjson lat "$LAT" \
+      --argjson lng "$LNG" \
+      --argjson alt "$ALT" \
+      --argjson acc "$ACC" \
+      '{lat: $lat, lng: $lng, altitude: $alt, accuracy: $acc}')
+    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "gps/data" -m "$GPS_PAYLOAD"
+    echo "[📡 TELEMETRÍA] Enviada: Alt: $ALT m, Acc: $ACC m"
     
     ALT_INT=${ALT%.*}
     if [ -n "$ALT_INT" ] && [ "$ALT_INT" != "null" ]; then

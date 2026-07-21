@@ -41,8 +41,8 @@ function updateMapCoordinates(type, lat, lng) {
         paths[type].addLatLng(latlng);
     }
     
-    // Auto-centrar en el primer paquete válido recibido de la sonda
-    if (type === 'movil' && !mapCentered) {
+    // Auto-centrar en el primer paquete válido recibido de la sonda (vía Móvil o LoRa)
+    if ((type === 'movil' || type === 'lora') && !mapCentered) {
         map.setView(latlng, 15);
         mapCentered = true;
     }

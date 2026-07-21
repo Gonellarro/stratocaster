@@ -515,11 +515,7 @@
         <!-- PANEL CENTRAL: Curva de Vuelo, T+ Cronómetro y Caja IA -->
         <div class="center-group">
             
-            <!-- Caja de Inferencia IA Flotante -->
-            <div id="ia-box" class="ia-panel-overlay">
-                <div class="ia-overlay-header">🧠 INFERENCIA LOCAL DE IA</div>
-                <div id="ia-text" class="ia-overlay-text">Procesando primera imagen...</div>
-            </div>
+
 
             <!-- Curva de Trayectoria -->
             <div class="trajectory-container">
@@ -804,12 +800,9 @@
             updateTrajectoryCurve(safeAlt);
         }
 
-        // 5. Procesar descripciones de la IA
+        // 5. Procesar descripciones de la IA (Desactivado para la pantalla de OBS)
         function handleIaCamera(data) {
-            if (data.texto) {
-                document.getElementById('ia-box').style.display = 'block';
-                document.getElementById('ia-text').textContent = data.texto;
-            }
+            // El mensaje de foto se visualiza en el Dashboard web, no en el HUD de OBS
         }
 
         // 6. Consultar estado en REST API

@@ -81,25 +81,33 @@ function handleMobileTelemetry(data) {
 }
 
 function handleLoraTelemetry(data) {
-    // Actualizar tabla comparativa
-    document.getElementById('td-l-sats').textContent = 'Fijo';
-    document.getElementById('td-l-alt').textContent = data.altitude !== null ? parseFloat(data.altitude).toFixed(1) + ' m' : '--';
-    document.getElementById('td-l-lat').textContent = data.lat !== null ? parseFloat(data.lat).toFixed(5) : '--';
-    document.getElementById('td-l-lng').textContent = data.lng !== null ? parseFloat(data.lng).toFixed(5) : '--';
-    document.getElementById('td-l-spd').textContent = data.speed !== undefined ? parseFloat(data.speed).toFixed(1) + ' km/h' : '--';
-    document.getElementById('td-l-crs').textContent = data.course !== undefined ? data.course + '°' : '--';
+    // 1. Actualizar referencias LoRa
+    if (document.getElementById('td-l-sats')) document.getElementById('td-l-sats').textContent = 'Fijo';
+    if (document.getElementById('td-l-alt')) document.getElementById('td-l-alt').textContent = data.altitude !== null && data.altitude !== undefined ? parseFloat(data.altitude).toFixed(1) + ' m' : '--';
+    if (document.getElementById('td-l-lat')) document.getElementById('td-l-lat').textContent = data.lat !== null && data.lat !== undefined ? parseFloat(data.lat).toFixed(5) : '--';
+    if (document.getElementById('td-l-lng')) document.getElementById('td-l-lng').textContent = data.lng !== null && data.lng !== undefined ? parseFloat(data.lng).toFixed(5) : '--';
+    if (document.getElementById('td-l-spd')) document.getElementById('td-l-spd').textContent = data.speed !== undefined && data.speed !== null ? parseFloat(data.speed).toFixed(1) + ' km/h' : '--';
+    if (document.getElementById('td-l-crs')) document.getElementById('td-l-crs').textContent = data.course !== undefined && data.course !== null ? data.course + '°' : '--';
     
-    // Si la sonda perdió cobertura móvil o aún no hay posición fija por 4G, alimentar visores principales con LoRa
-    const currentLat = document.getElementById('td-m-lat').textContent;
-    if (!checks.movil || currentLat === '--' || currentLat === '') {
-        if (data.lat !== null && data.lat !== undefined) document.getElementById('td-m-lat').textContent = parseFloat(data.lat).toFixed(5);
-        if (data.lng !== null && data.lng !== undefined) document.getElementById('td-m-lng').textContent = parseFloat(data.lng).toFixed(5);
-        if (data.altitude !== null && data.altitude !== undefined) document.getElementById('mini-alt').textContent = parseFloat(data.altitude).toFixed(1) + ' m';
-        if (data.speed !== undefined && data.speed !== null) document.getElementById('mini-spd').textContent = parseFloat(data.speed).toFixed(1) + ' km/h';
-        if (data.course !== undefined && data.course !== null) document.getElementById('mini-crs').textContent = getWindDirection(data.course) + ' (' + data.course + '°)';
+    // 2. Volcar SIEMPRE los datos reales de radio LoRa (868MHz) a las tarjetas de Telemetría en Tiempo Real
+    if (data.lat !== null && data.lat !== undefined && data.lat !== 'null') {
+        document.getElementById('td-m-lat').textContent = parseFloat(data.lat).toFixed(5);
+    }
+    if (data.lng !== null && data.lng !== undefined && data.lng !== 'null') {
+        document.getElementById('td-m-lng').textContent = parseFloat(data.lng).toFixed(5);
+    }
+    if (data.altitude !== null && data.altitude !== undefined && data.altitude !== 'null') {
+        document.getElementById('mini-alt').textContent = parseFloat(data.altitude).toFixed(1) + ' m';
+    }
+    if (data.speed !== undefined && data.speed !== null && data.speed !== 'null') {
+        document.getElementById('mini-spd').textContent = parseFloat(data.speed).toFixed(1) + ' km/h';
+    }
+    if (data.course !== undefined && data.course !== null && data.course !== 'null') {
+        const courseNum = parseFloat(data.course);
+        document.getElementById('mini-crs').textContent = getWindDirection(courseNum) + ' (' + courseNum.toFixed(1) + '°)';
     }
 
-    // Pintar ruta y marcador rojo de LoRa en el mapa
+    // 3. Pintar ruta y marcador rojo de LoRa en el mapa
     updateMapCoordinates('lora', data.lat, data.lng);
 }
 

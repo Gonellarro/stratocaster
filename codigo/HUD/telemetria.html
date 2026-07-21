@@ -660,17 +660,24 @@
             client.on('message', (topic, message) => {
                 const payload = JSON.parse(message.toString());
                 lastMessageTime = Date.now();
-                updateConnectionState(true);
 
-                if (topic === 'sonda/status') {
+                if (topic === 'sonda/status' || topic === 'sonda/camera') {
                     lastMobilePing = Date.now();
-                    handleSondaStatus(payload);
+                    if (topic === 'sonda/status') handleSondaStatus(payload);
+                    if (topic === 'sonda/camera') handleIaCamera(payload);
                 } else if (topic === 'gps/data') {
-                    handleGpsData(payload);
-                } else if (topic === 'sonda/camera') {
-                    lastMobilePing = Date.now();
-                    handleIaCamera(payload);
+                    // Si no contiene el campo 'date' característico de LoRa, es del móvil
+                    const isFromMobile = (payload.date === undefined || payload.accuracy !== undefined);
+                    if (isFromMobile) {
+                        lastMobilePing = Date.now();
+                    } else {
+                        lastLoraPing = Date.now();
+                    }
+                    handleGpsData(payload, isFromMobile);
                 }
+
+                // Llamar a updateConnectionState DESPUÉS de haber registrado las marcas de tiempo
+                updateConnectionState(true);
             });
         } catch (e) {
             console.error('Error al inicializar MQTT:', e);
@@ -689,7 +696,8 @@
             const videoDot = document.getElementById('video-dot');
             const videoText = document.getElementById('video-text');
 
-            const isMobileActive = (Date.now() - lastMobilePing < 35000 && lastMobilePing > 0);
+            // Considerar el móvil activo si ha enviado datos en los últimos 60 segundos
+            const isMobileActive = (Date.now() - lastMobilePing < 60000 && lastMobilePing > 0);
 
             // 1. Estado de Telemetría (Móvil 4G vs LoRa 868MHz)
             if (connected) {
@@ -746,13 +754,11 @@
         }
 
         // 3. Procesar gps/data (Fase de vuelo / LoRa 868MHz prioritario)
-        function handleGpsData(data) {
-            const isFromMobile = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null");
-            
+        function handleGpsData(data, isFromMobile = false) {
             if (isFromMobile) {
                 lastMobilePing = Date.now();
                 // Si ya tenemos datos de LoRa activos, no sobrescribir altitud/velocidad con el GPS del móvil
-                if (Date.now() - lastLoraPing < 120000) {
+                if (Date.now() - lastLoraPing < 120000 && lastLoraPing > 0) {
                     return;
                 }
             } else {

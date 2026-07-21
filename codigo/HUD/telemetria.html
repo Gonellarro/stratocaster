@@ -474,9 +474,15 @@
         <!-- PANEL IZQUIERDO: Velocidad y Altitud -->
         <div class="telemetry-group left-group">
             
-            <div class="status-header-info">
-                <span id="conn-dot" class="status-dot"></span>
-                <span id="conn-text">TELEMETRÍA OFFLINE</span>
+            <div class="status-header-info" style="position: absolute; top: -55px; left: 10px; background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 10px; padding: 6px 14px; backdrop-filter: blur(8px); display: flex; flex-direction: column; gap: 4px; align-items: flex-start;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span id="video-dot" class="status-dot"></span>
+                    <span id="video-text" style="font-size: 0.75rem; font-weight: bold; letter-spacing: 1px; color: #ef4444;">VÍDEO OFFLINE MÓVIL 4G</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span id="conn-dot" class="status-dot"></span>
+                    <span id="conn-text" style="font-size: 0.75rem; font-weight: bold; letter-spacing: 1px; color: #ef4444;">TELEMETRÍA OFFLINE</span>
+                </div>
             </div>
 
             <!-- Gauge 1: Velocidad -->
@@ -680,15 +686,33 @@
         function updateConnectionState(connected) {
             const dot = document.getElementById('conn-dot');
             const text = document.getElementById('conn-text');
+            const videoDot = document.getElementById('video-dot');
+            const videoText = document.getElementById('video-text');
+
+            const isMobileActive = (Date.now() - lastMobilePing < 35000 && lastMobilePing > 0);
+
+            // 1. Estado de Telemetría (Móvil 4G vs LoRa 868MHz)
             if (connected) {
                 dot.classList.add('online');
-                const isMobileActive = (Date.now() - lastMobilePing < 20000);
                 text.textContent = isMobileActive ? 'TELEMETRÍA MÓVIL (4G)' : 'TELEMETRÍA LORA (868MHz)';
                 text.style.color = 'var(--green-accent)';
             } else {
                 dot.classList.remove('online');
                 text.textContent = 'TELEMETRÍA OFFLINE';
                 text.style.color = '#ef4444';
+            }
+
+            // 2. Estado de Vídeo Móvil 4G
+            if (videoDot && videoText) {
+                if (isMobileActive) {
+                    videoDot.classList.add('online');
+                    videoText.textContent = 'VÍDEO ONLINE MÓVIL 4G';
+                    videoText.style.color = 'var(--green-accent)';
+                } else {
+                    videoDot.classList.remove('online');
+                    videoText.textContent = 'VÍDEO OFFLINE MÓVIL 4G';
+                    videoText.style.color = '#ef4444';
+                }
             }
         }
 
@@ -705,31 +729,34 @@
             
             const lat = parseFloat(data.lat);
             const lng = parseFloat(data.lng);
-            const altRaw = data.alt !== undefined ? data.alt : data.altitude;
-            const alt = parseFloat(altRaw);
             
             if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
                 if (launchpadLat === null) {
                     launchpadLat = lat;
                     launchpadLng = lng;
                 }
-                const altNum = !isNaN(alt) ? alt : 0;
-                updateSondaLocation(lat, lng, altNum, parseFloat(data.accuracy || 0));
+                // Si aún no hemos recibido fix de LoRa, usar las coordenadas de rampa del móvil como respaldo inicial
+                if (lastLoraPing === 0) {
+                    const altRaw = data.alt !== undefined ? data.alt : data.altitude;
+                    const alt = parseFloat(altRaw);
+                    const altNum = !isNaN(alt) ? alt : 0;
+                    updateSondaLocation(lat, lng, altNum, parseFloat(data.accuracy || 0));
+                }
             }
         }
 
-        // 3. Procesar gps/data (Fase de vuelo / Móvil 4G vs LoRa 868MHz)
+        // 3. Procesar gps/data (Fase de vuelo / LoRa 868MHz prioritario)
         function handleGpsData(data) {
             const isFromMobile = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null");
-            const isMobileActive = (Date.now() - lastMobilePing < 20000);
             
             if (isFromMobile) {
                 lastMobilePing = Date.now();
-            }
-
-            // Si el mensaje viene de LoRa pero el Móvil 4G sigue online, dejamos que el Móvil 4G mantenga la prioridad principal
-            if (!isFromMobile && isMobileActive) {
-                return; // Móvil 4G activo: mantener telemetría móvil en el HUD
+                // Si ya tenemos datos de LoRa activos, no sobrescribir altitud/velocidad con el GPS del móvil
+                if (Date.now() - lastLoraPing < 120000) {
+                    return;
+                }
+            } else {
+                lastLoraPing = Date.now();
             }
 
             const lat = parseFloat(data.lat);

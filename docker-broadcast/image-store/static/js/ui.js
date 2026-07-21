@@ -38,6 +38,9 @@ function updateLinkState(linkId, connected) {
             if (lastPingEl) {
                 lastPingEl.textContent = new Date().toLocaleTimeString();
             }
+            if (checks.movil === false) {
+                logMessage('ok', 'CONEXIÓN', 'Cobertura 4G de la Sonda Móvil recuperada (transmisión en directo reanudada).');
+            }
         }
     } else {
         if (badge) {

@@ -57,15 +57,14 @@ def change_launch_status():
         LAUNCH_STATE['estado'] = 'armando'
         LAUNCH_STATE['tiempo_restante'] = 0
         LAUNCH_STATE['timestamp_inicio'] = 0.0
-        if LAUNCH_STATE['timestamp_mision'] == 0.0:
-            LAUNCH_STATE['timestamp_mision'] = time.time()
+        LAUNCH_STATE['timestamp_mision'] = 0.0
     elif action == 'ok':
-        # La sonda responde con su estado OK. Arrancamos la cuenta atrás real.
+        # La sonda confirma estar lista. Arrancamos la cuenta atrás real y la marca de tiempo de misión.
+        now = time.time()
         LAUNCH_STATE['estado'] = 'cuenta_atras'
-        LAUNCH_STATE['timestamp_inicio'] = time.time()
+        LAUNCH_STATE['timestamp_inicio'] = now
+        LAUNCH_STATE['timestamp_mision'] = now
         LAUNCH_STATE['tiempo_restante'] = 10
-        if LAUNCH_STATE['timestamp_mision'] == 0.0:
-            LAUNCH_STATE['timestamp_mision'] = time.time()
     elif action == 'abortar' or action == 'reset':
         LAUNCH_STATE['estado'] = 'espera'
         LAUNCH_STATE['tiempo_restante'] = 0

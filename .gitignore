@@ -10,6 +10,9 @@ docker-TIG/grafana/*
 !docker-TIG/grafana/provisioning/
 docker-broadcast/images/
 images/
+docker-TIG/mosquitto/certs/*.key
+docker-TIG/mosquitto/certs/*.csr
+docker-TIG/mosquitto/certs/*.srl
 
 # Archivos con credenciales y contraseñas (Secretos)
 .env

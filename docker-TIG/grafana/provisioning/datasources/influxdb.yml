@@ -9,7 +9,7 @@ datasources:
     isDefault: true
     jsonData:
       version: Flux
-      organization: MartiHomelab
-      defaultBucket: telegraf_db
+      organization: $INFLUX_ORG
+      defaultBucket: $INFLUX_BUCKET
     secureJsonData:
-      token: lGU6gtMnhxb3g4Aaqi27WyLzfOJnVM==
+      token: $INFLUX_TOKEN

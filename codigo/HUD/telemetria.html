@@ -628,13 +628,14 @@
         const mqttUrl = useSSL ? `${wsProtocol}//${serverIP}/mqtt` : `${wsProtocol}//${serverIP}:${mqttPort}`;
         const restUrl = useSSL ? `${httpProtocol}//${serverIP}/control_lanzamiento` : `${httpProtocol}//${serverIP}:5000/control_lanzamiento`;
 
-        const mqttUser = urlParams.get('mqtt_user') || 'admin';
-        const mqttPass = urlParams.get('mqtt_pass') || 'AWLCxdfGxwohHF2qpScJLK9AbRAFxD';
+        const mqttUser = urlParams.get('mqtt_user') || '';
+        const mqttPass = urlParams.get('mqtt_pass') || '';
         const targetDeviceID = urlParams.get('device_id') || 'movil_sonda_1';
 
         let client = null;
         let lastMessageTime = 0;
         let lastMobilePing = 0;
+        let lastLoraPing = 0;
 
         // Coordenadas de la rampa para el cálculo de recorrido (se memorizan al despegar)
         let launchpadLat = null;
@@ -662,7 +663,13 @@
             });
 
             client.on('message', (topic, message) => {
-                const payload = JSON.parse(message.toString());
+                let payload;
+                try {
+                    payload = JSON.parse(message.toString());
+                } catch(e) {
+                    console.error("Error parseando JSON de MQTT en topic " + topic + ":", e);
+                    return;
+                }
                 lastMessageTime = Date.now();
 
                 const topicParts = topic.split('/');

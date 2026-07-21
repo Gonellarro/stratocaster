@@ -1,5 +1,14 @@
 # Devlog: Sonda IoT - Integración de Cámara y Telemetría en Grafana
 
+## 📋 Índice de Sesiones
+* [Sesión 2026-07-03](#sesion-2026-07-03) — Integración de captura de imágenes, inferencia de IA local y geolocalización dual en TIG.
+* [Sesión 2026-07-05 / 2026-07-06](#sesion-2026-07-05-2026-07-06) — WebSockets, Rediseño HUD de OBS estilo SpaceX, Autotests y Comandos.
+* [Sesión 2026-07-06 (Tarde)](#sesion-2026-07-06-tarde) — Asincronismo, GPS Fallbacks, Consola Premium, VDO.ninja y Vuelo Autónomo.
+* [Sesión 2026-07-21](#sesion-2026-07-21) — Sincronización temporal, Redundancia LoRa/4G, Enlaces activos y Rediseño HUD.
+
+---
+
+<a name="sesion-2026-07-03"></a>
 **Fecha:** 2026-07-03  
 **Sesión:** Integración de captura de imágenes, inferencia local de IA (Qwen3-VL) y geolocalización dual en el ecosistema TIG (Telegraf + InfluxDB + Grafana).
 
@@ -72,6 +81,7 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
 
 ---
 
+<a name="sesion-2026-07-05-2026-07-06"></a>
 **Fecha:** 2026-07-05 / 2026-07-06  
 **Sesión:** Implementación del HUD de OBS estilo SpaceX, soporte de WebSockets en Mosquitto, y optimización de la consola de control pre-vuelo en tierra.
 
@@ -106,6 +116,7 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
 * **Solución al Cuelgue del Script (Stdin Hijacking):** Corregido un sutil bug de pipes de Bash donde `llama-mtmd-cli` se quedaba congelado. Se solucionó redireccionando la entrada estándar a `/dev/null` (`</dev/null`) tanto en las llamadas a la IA como al receptor de comandos de fondo.
 ---
 
+<a name="sesion-2026-07-06-tarde"></a>
 **Fecha:** 2026-07-06  
 **Sesión:** Secuenciador asíncrono pre-vuelo, reintentos con animación de puntos suspensivos en checklist y robustez de GPS en interiores.
 
@@ -211,6 +222,7 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
 
 ---
 
+<a name="sesion-2026-07-21"></a>
 **Fecha:** 2026-07-21  
 **Sesión:** Sincronización del tiempo de misión, priorización de telemetría LoRa, detección dinámica de enlaces en rampa y rediseño de alertas del HUD de OBS.
 
@@ -240,4 +252,24 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
     1. **Vídeo Móvil 4G:** Alterna entre `VÍDEO ONLINE MÓVIL 4G` (verde) y `VÍDEO OFFLINE MÓVIL 4G` (rojo si el script suspende Chrome por falta de cobertura).
     2. **Telemetría:** Alterna entre `TELEMETRÍA MÓVIL (4G)`, `TELEMETRÍA LORA (868MHz)` y `TELEMETRÍA OFFLINE` según la actividad de los canales.
 * **Sonda Móvil (`sonda_loop.sh`):** Corregida la periodicidad de telemetría en Fase 1 (Ignición) para enviar paquetes de presencia a Mosquitto de forma ininterrumpida cada 5 segundos y evitar que el Dashboard o el HUD lo declaren fuera de línea.
+
+## 5. Auditoría de Seguridad, Refactorización y Limpieza de Deuda Técnica
+* **Securización del Broker MQTT y Credenciales:** Eliminadas las credenciales de administración MQTT (`admin` / `AWLCxdfGxwohHF2qpScJLK9AbRAFxD`) hardcodeadas en los scripts del cliente JavaScript ([main.js](file:///home/marti/Documentos/Personal/Sonda/docker-broadcast/image-store/static/js/main.js) y [telemetria.html](file:///home/marti/Documentos/Personal/Sonda/codigo/HUD/telemetria.html)). Ahora el cliente web las extrae dinámicamente de los parámetros de la URL (`?mqtt_user=...&mqtt_pass=...`), manteniendo el repositorio limpio y seguro.
+* **Ignorado de Secretos y Certificados:** Añadidas las exclusiones de `secrets.h` de LoRa, `password_file` de Mosquitto y las carpetas de caché de Python `__pycache__/` en el [.gitignore](file:///home/marti/Documentos/Personal/Sonda/.gitignore). Se removieron del índice de Git (untracked) sin borrar las copias locales del servidor.
+* **Creación de Plantillas `.env`:** Creados los archivos de ejemplo [sonda.env.example](file:///home/marti/Documentos/Personal/Sonda/codigo/Android/sonda.env.example) y [.env.example](file:///home/marti/Documentos/Personal/Sonda/docker-TIG/.env.example) con credenciales genéricas como guía para nuevos despliegues.
+* **Interpolación de Token en InfluxDB:** Sustituido el token admin hardcodeado en la configuración de datos de Grafana ([influxdb.yml](file:///home/marti/Documentos/Personal/Sonda/docker-TIG/grafana/provisioning/datasources/influxdb.yml)) por la variable de entorno `$INFLUX_TOKEN`, la cual ya está inyectada en el contenedor.
+* **Refactorización de `sonda_loop.sh`:**
+  * Creadas las funciones auxiliares `publish_mqtt` y `stop_video_apps`, junto con la variable `VDO_NINJA_URL`, eliminando código duplicado repetido 14 y 5 veces respectivamente.
+  * Añadidos timeouts de red `--connect-timeout 10 --max-time 30` en las subidas de `curl` para evitar bloqueos del bucle.
+  * Corregido el trap de salida para matar también al suscriptor MQTT de fondo (`$SUB_PID`), evitando procesos zombies en Termux.
+* **Bugs en el HUD (`telemetria.html`):** Declarada formalmente la variable `lastLoraPing` (antes implícita) y envuelto `JSON.parse()` en un bloque `try/catch` para que los mensajes de MQTT malformados no detengan la interfaz.
+* **Securización e Infraestructura de la Imagen Flask:**
+  * Actualizado el [Dockerfile](file:///home/marti/Documentos/Personal/Sonda/docker-broadcast/image-store/Dockerfile) para usar la imagen de producción `python:3.12-slim` y configurado el servidor WSGI `gunicorn` para entornos de producción.
+  * Restringidas las cabeceras CORS en [app.py](file:///home/marti/Documentos/Personal/Sonda/docker-broadcast/image-store/app.py) para permitir peticiones únicamente desde localhost, IPs de subred local (`192.168.*`) y el dominio de confianza `stratocaster.martivich.es`.
+* **Reorganización del Repositorio:**
+  * Creada una estructura jerárquica limpia en la carpeta `docs/`.
+  * Traducido el manual de instalación de Termux ([instalacion_termux.md](file:///home/marti/Documentos/Personal/Sonda/docs/instalacion_termux.md)) al castellano.
+  * Archivados los manuales y diseños obsoletos en `docs/legacy/`.
+  * Eliminados los archivos basura y versiones obsoletas de firmwares LoRa (`old/`, `old2/`, `TXLora_old/`).
+  * Creado el archivo [README.md](file:///home/marti/Documentos/Personal/Sonda/README.md) principal en la raíz con diagramas de flujo interactivos de Mermaid.
 

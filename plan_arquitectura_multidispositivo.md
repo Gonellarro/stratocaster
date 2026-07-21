@@ -1,5 +1,7 @@
 # Plan de Arquitectura IoT Multi-Dispositivo (Sonda Stratocaster)
 
+**Estado:** Implementado (Live)
+
 Este documento detalla la reestructuración del ecosistema de comunicaciones IoT del proyecto. El objetivo es permitir que la sonda albergue **múltiples teléfonos móviles simultáneos** (ej: redundancia, diferentes ángulos de cámara), además de rastreadores LoRa, drones o móviles de asistencia en tierra, evitando colisiones de datos y automatizando su visualización en el stack TIG y el HUD de OBS.
 
 ---

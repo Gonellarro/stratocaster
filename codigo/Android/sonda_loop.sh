@@ -44,8 +44,29 @@ for cmd in termux-camera-photo termux-wake-lock termux-wake-unlock mosquitto_pub
     fi
 done
 
-# Tiempo de bucle de fotos en fase autónoma
-TIEMPO=10
+# URL de VDO.ninja para transmisión de vídeo (facilidad de mantenimiento)
+VDO_NINJA_URL="https://vdo.ninja/?push=sonda_stratocaster&webcam&facing=back&autostart&noaudio&videobitrate=1000&quality=2&nopreview&clean&forcelandscape"
+
+# Función auxiliar para detener aplicaciones de vídeo en directo
+stop_video_apps() {
+    echo "[🔌 VIDEO] Deteniendo transmisión de vídeo en directo..."
+    am force-stop flutter.vdo.ninja &>/dev/null
+    am force-stop com.android.chrome &>/dev/null
+    am force-stop com.wmspanel.larix_broadcaster &>/dev/null
+}
+
+# Función auxiliar para publicar mensajes MQTT
+publish_mqtt() {
+    local topic="$1"
+    local message="$2"
+    local run_in_bg="${3:-false}"
+    
+    if [ "$run_in_bg" = "true" ]; then
+        mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$topic" -m "$message" &>/dev/null &
+    else
+        mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$topic" -m "$message" &>/dev/null
+    fi
+}
 
 # Asegurar que la CPU de Android no entre en reposo profundo
 termux-wake-lock
@@ -58,8 +79,8 @@ rm -f "$GPS_LOG"
 termux-location -r updates > "$GPS_LOG" 2>/dev/null &
 GPS_PID=$!
 
-# Liberar recursos y matar el proceso de GPS al salir del script
-trap 'echo "[INFO] Liberando recursos y deteniendo GPS pasivo..."; kill -9 $GPS_PID 2>/dev/null; rm -f "$ARMED_FLAG"; termux-wake-unlock' EXIT
+# Liberar recursos y matar el proceso de GPS/MQTT al salir del script
+trap 'echo "[INFO] Liberando recursos, deteniendo GPS y receptor MQTT..."; kill -9 $GPS_PID $SUB_PID 2>/dev/null; pkill -9 -P $SUB_PID 2>/dev/null; rm -f "$ARMED_FLAG"; termux-wake-unlock' EXIT
 
 # Función auxiliar para leer la mejor localización disponible al instante sin bloquear
 get_gps_location() {
@@ -121,12 +142,12 @@ handle_command() {
               --argjson acc "$ACC" \
               '{status: "diagnostico", level: $lvl, temp: $tmp, lat: $lat, lng: $lng, alt: $alt, accuracy: $acc}')
               
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m "$STATUS_PAYLOAD"
+            publish_mqtt "$TOPIC_STATUS" "$STATUS_PAYLOAD"
             ;;
             
         "init_gps")
             echo "[🛰️ GPS] Iniciando receptor GPS..."
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "gps_initializing"}'
+            publish_mqtt "$TOPIC_STATUS" '{"status": "gps_initializing"}'
             timeout 5 termux-tts-speak "Iniciando búsqueda de satélites GPS." 2>/dev/null
             
             sleep 2
@@ -144,38 +165,36 @@ handle_command() {
                   --argjson acc "$ACC" \
                   '{status: "gps_ok", lat: $lat, lng: $lng, alt: $alt, accuracy: $acc}')
                   
-                mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m "$STATUS_PAYLOAD"
+                publish_mqtt "$TOPIC_STATUS" "$STATUS_PAYLOAD"
                 timeout 5 termux-tts-speak "Señal de GPS fijada correctamente." 2>/dev/null
             else
-                mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "gps_failed"}'
+                publish_mqtt "$TOPIC_STATUS" '{"status": "gps_failed"}'
                 timeout 5 termux-tts-speak "Error al fijar señal de GPS." 2>/dev/null
             fi
             ;;
             
         "test_audio")
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "audio_ok"}'
+            publish_mqtt "$TOPIC_STATUS" '{"status": "audio_ok"}'
             timeout 5 termux-tts-speak "Sonda en línea y lista para la comprobación." 2>/dev/null
             ;;
             
         "test_video_on")
             echo "[📹 VIDEO] Test de vídeo: Iniciando streaming..."
             touch "$VIDEO_FLAG"
-            am start -a android.intent.action.VIEW -d "https://vdo.ninja/?push=sonda_stratocaster&webcam&facing=back&autostart&noaudio&videobitrate=1000&quality=2&nopreview&clean" &>/dev/null
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "video_streaming_on"}'
+            am start -a android.intent.action.VIEW -d "$VDO_NINJA_URL" &>/dev/null
+            publish_mqtt "$TOPIC_STATUS" '{"status": "video_streaming_on"}'
             ;;
             
         "test_video_off")
             echo "[📹 VIDEO] Test de vídeo: Deteniendo streaming..."
             rm -f "$VIDEO_FLAG"
-            am force-stop flutter.vdo.ninja &>/dev/null
-            am force-stop com.android.chrome &>/dev/null
-            am force-stop com.wmspanel.larix_broadcaster &>/dev/null
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "video_streaming_off"}'
+            stop_video_apps
+            publish_mqtt "$TOPIC_STATUS" '{"status": "video_streaming_off"}'
             ;;
             
         "test_photo")
             echo "[📸 CÁMARA] Solicitud de test de foto..."
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "camera_testing"}'
+            publish_mqtt "$TOPIC_STATUS" '{"status": "camera_testing"}'
             
             RELAUNCH_VIDEO=0
             if [ -f "$VIDEO_FLAG" ]; then
@@ -194,7 +213,7 @@ handle_command() {
             # Reanudar vídeo si estaba activo antes
             if [ "$RELAUNCH_VIDEO" -eq 1 ]; then
                 echo "[📹 VIDEO] Reanudando transmisión de vídeo..."
-                am start -a android.intent.action.VIEW -d "https://vdo.ninja/?push=sonda_stratocaster&webcam&facing=back&autostart&noaudio&videobitrate=1000&quality=2&nopreview&clean&forcelandscape" &>/dev/null
+                am start -a android.intent.action.VIEW -d "$VDO_NINJA_URL" &>/dev/null
             fi
             
             if [ -f "$TARGET_IMG" ]; then
@@ -206,7 +225,7 @@ handle_command() {
                 ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
                 
                 echo "[📸 CÁMARA] Subiendo foto de test a la web..."
-                UPLOAD_RESP=$(curl -s -F "file=@$TARGET_IMG" -F "texto=$TEXTO_DETECTADO" -F "device_id=$DEVICE_ID" "$IMAGE_SERVER_URL/upload")
+                UPLOAD_RESP=$(curl -s --connect-timeout 10 --max-time 30 -F "file=@$TARGET_IMG" -F "texto=$TEXTO_DETECTADO" -F "device_id=$DEVICE_ID" "$IMAGE_SERVER_URL/upload")
                 
                 if [ $? -eq 0 ] && [ -n "$UPLOAD_RESP" ] && [[ "$UPLOAD_RESP" != *"Error"* ]]; then
                     FILENAME="$UPLOAD_RESP"
@@ -220,14 +239,14 @@ handle_command() {
                       --argjson alt "$ALT" \
                       '{texto: $txt, url_imagen: $url, lat: $lat, lng: $lng, alt: $alt}')
                     
-                    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_CAMERA" -m "$PAYLOAD"
+                    publish_mqtt "$TOPIC_CAMERA" "$PAYLOAD"
                     timeout 5 termux-tts-speak "Comprobación de cámara completada con éxito." 2>/dev/null
                 else
                     echo "[❌ ERROR] Falló la subida de la foto de test: $UPLOAD_RESP"
-                    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "camera_error"}'
+                    publish_mqtt "$TOPIC_STATUS" '{"status": "camera_error"}'
                 fi
             else
-                mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "camera_capture_failed"}'
+                publish_mqtt "$TOPIC_STATUS" '{"status": "camera_capture_failed"}'
             fi
             ;;
             
@@ -240,7 +259,7 @@ handle_command() {
             
         "arm")
             # 1. Notificar armado por MQTT
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "armed"}'
+            publish_mqtt "$TOPIC_STATUS" '{"status": "armed"}'
             
             echo "[🛰️ NET] Sonda Armada. Esperando cuenta atrás..."
             timeout 5 termux-tts-speak "Sonda Armada. Lista para el lanzamiento." 2>/dev/null
@@ -257,14 +276,12 @@ handle_command() {
             rm -f "$VIDEO_FLAG"
             
             # Detener vídeo
-            am force-stop flutter.vdo.ninja &>/dev/null
-            am force-stop com.android.chrome &>/dev/null
-            am force-stop com.wmspanel.larix_broadcaster &>/dev/null
+            stop_video_apps
             
             timeout 5 termux-tts-speak "Lanzamiento abortado. Volviendo a modo de espera." 2>/dev/null
             sleep 1
             
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "aborted"}'
+            publish_mqtt "$TOPIC_STATUS" '{"status": "aborted"}'
             ;;
     esac
 }
@@ -315,7 +332,7 @@ echo "====================================================="
 
 # Arrancar el vídeo en directo de forma automática en el despegue (cámara trasera, autostart, sin audio y bitrate controlado)
 touch "$VIDEO_FLAG"
-am start -a android.intent.action.VIEW -d "https://vdo.ninja/?push=sonda_stratocaster&webcam&facing=back&autostart&noaudio&videobitrate=1000&quality=2&nopreview&clean&forcelandscape" &>/dev/null
+am start -a android.intent.action.VIEW -d "$VDO_NINJA_URL" &>/dev/null
 sleep 2
 
 START_TIME=$(date +%s)
@@ -328,9 +345,7 @@ while true; do
         rm -f "$ABORT_FLAG"
         rm -f "$VIDEO_FLAG"
         # Detener vídeo
-        am force-stop flutter.vdo.ninja &>/dev/null
-        am force-stop com.android.chrome &>/dev/null
-        am force-stop com.wmspanel.larix_broadcaster &>/dev/null
+        stop_video_apps
         # Reiniciar script desde cero
         exec "$0" "$@"
     fi
@@ -350,7 +365,7 @@ while true; do
       --argjson alt "$ALT" \
       --argjson acc "$ACC" \
       '{lat: $lat, lng: $lng, altitude: $alt, accuracy: $acc}')
-    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_TELEMETRY" -m "$GPS_PAYLOAD"
+    publish_mqtt "$TOPIC_TELEMETRY" "$GPS_PAYLOAD"
     echo "[📡 TELEMETRÍA] Enviada: Alt: $ALT m, Acc: $ACC m"
     
     ALT_INT=${ALT%.*}
@@ -376,10 +391,7 @@ kill -9 "$SUB_PID" 2>/dev/null
 pkill -9 -P "$SUB_PID" 2>/dev/null
 
 # Detener retransmisión de vídeo
-echo "[🔌 VIDEO] Deteniendo transmisión de vídeo en directo..."
-am force-stop flutter.vdo.ninja &>/dev/null
-am force-stop com.android.chrome &>/dev/null
-am force-stop com.wmspanel.larix_broadcaster &>/dev/null
+stop_video_apps
 sleep 2
 
 # ==============================================================================
@@ -423,7 +435,7 @@ while true; do
         # Con cobertura: Si el vídeo estaba apagado, lo encendemos para el directo
         if [ "$VIDEO_RUNNING" -eq 0 ]; then
             echo "[🛰️ NET] Conexión recuperada. Reanudando vídeo en directo..."
-            am start -a android.intent.action.VIEW -d "https://vdo.ninja/?push=sonda_stratocaster&webcam&facing=back&autostart&noaudio&videobitrate=1000&quality=2&nopreview&clean&forcelandscape" &>/dev/null
+            am start -a android.intent.action.VIEW -d "$VDO_NINJA_URL" &>/dev/null
             VIDEO_RUNNING=1
             sleep 2
         fi
@@ -442,15 +454,13 @@ while true; do
           --argjson accuracy "$ACC" \
           '{"status": "diagnostico", "level": $level, "temp": $temp, "lat": $lat, "lng": $lng, "alt": $alt, "accuracy": $accuracy}')
 
-        mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m "$PAYLOAD" &>/dev/null &
+        publish_mqtt "$TOPIC_STATUS" "$PAYLOAD" true
         echo "[🛰️ NET] [$(date +%T)] Telemetría enviada por MQTT."
     else
         # Sin cobertura: Si el directo de Chrome está corriendo, lo matamos para salvar batería
         if [ "$VIDEO_RUNNING" -eq 1 ]; then
             echo "[🛰️ NET] Conexión perdida. Apagando vídeo para conservar batería..."
-            am force-stop flutter.vdo.ninja &>/dev/null
-            am force-stop com.android.chrome &>/dev/null
-            am force-stop com.wmspanel.larix_broadcaster &>/dev/null
+            stop_video_apps
             VIDEO_RUNNING=0
         fi
     fi
@@ -471,7 +481,7 @@ while true; do
 
         # Reanudar directo tras el disparo si debe seguir activo
         if [ "$VIDEO_RUNNING" -eq 1 ]; then
-            am start -a android.intent.action.VIEW -d "https://vdo.ninja/?push=sonda_stratocaster&webcam&facing=back&autostart&noaudio&videobitrate=1000&quality=2&nopreview&clean&forcelandscape" &>/dev/null
+            am start -a android.intent.action.VIEW -d "$VDO_NINJA_URL" &>/dev/null
         fi
 
         if [ -f "$TARGET_IMG" ]; then
@@ -484,7 +494,7 @@ while true; do
 
             if [ "$COBERTURA" -eq 1 ]; then
                 echo "[$(date +%T)] 📤 Subiendo foto original al servidor..."
-                UPLOAD_RESP=$(curl -s -F "file=@$TARGET_IMG" -F "texto=$TEXTO_DETECTADO" -F "device_id=$DEVICE_ID" "$IMAGE_SERVER_URL/upload")
+                UPLOAD_RESP=$(curl -s --connect-timeout 10 --max-time 30 -F "file=@$TARGET_IMG" -F "texto=$TEXTO_DETECTADO" -F "device_id=$DEVICE_ID" "$IMAGE_SERVER_URL/upload")
 
                 if [ $? -eq 0 ] && [ -n "$UPLOAD_RESP" ] && [[ "$UPLOAD_RESP" != *"Error"* ]]; then
                     FILENAME="$UPLOAD_RESP"
@@ -499,7 +509,7 @@ while true; do
                       --argjson alt "$ALT" \
                       '{texto: $txt, url_imagen: $url, lat: $lat, lng: $lng, alt: $alt}')
 
-                    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_CAMERA" -m "$PAYLOAD"
+                    publish_mqtt "$TOPIC_CAMERA" "$PAYLOAD"
                 else
                     echo "[❌ ERROR] Falló la subida de foto: $UPLOAD_RESP"
                     echo "[$(date +%Y-%m-%d\ %H:%M:%S)] [OFFLINE_ERR] Lat: $LAT, Lng: $LNG, Alt: $ALT, Archivo: sonda_$TIMESTAMP.jpg" >> "$OFFLINE_LOG"

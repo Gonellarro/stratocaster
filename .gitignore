@@ -18,6 +18,10 @@ docker-TIG/mosquitto/certs/*.srl
 .env
 docker-TIG/.env
 codigo/Android/sonda.env
+codigo/RXLora/secrets.h
+docker-TIG/mosquitto/config/password_file
+__pycache__/
+*.pyc
 
 # Archivos temporales y logs de ejecución
 *.tmp

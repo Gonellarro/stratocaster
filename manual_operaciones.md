@@ -93,12 +93,12 @@ El script requiere permisos de ejecución en Termux de las siguientes herramient
 El script de control lee sus credenciales y rutas de un archivo `sonda.env`. Este archivo debe estar al lado de `sonda_loop.sh`:
 
 ```env
-IMAGE_SERVER_URL="https://sondafotos.martivich.es"
-MQTT_HOST="sondafotos.martivich.es"
+IMAGE_SERVER_URL="https://stratocaster.martivich.es"
+MQTT_HOST="stratocaster.martivich.es"
 MQTT_PORT=1883
 MQTT_USER="admin"
-MQTT_PASS="AWLCxdfGxwohHF2qpScJLK9AbRAFxD"
-MQTT_TOPIC="sonda/camera"
+MQTT_PASS="<TU_CONTRASEÑA_MQTT>"
+MQTT_TOPIC="sonda/mobile/movil_sonda_1/camera"
 ```
 
 ### Paso 3.2: Arrancar la Sonda
@@ -211,4 +211,4 @@ El HUD se encuentra en el archivo local: `/home/marti/Documentos/Personal/Sonda/
 
 #### ⚠️ La web muestra el mensaje "TELEMETRÍA OFFLINE"
 * **Causa:** Pérdida de comunicación con el bróker MQTT del servidor o credenciales incorrectas.
-* **Solución:** Revisa que el contenedor de `mosquitto` esté en marcha en el N100 (`docker ps`). Comprueba que el archivo `sonda.env` del móvil tenga la contraseña correcta (`AWLCxdfGxwohHF2qpScJLK9AbRAFxD`).
+* **Solución:** Revisa que el contenedor de `mosquitto` esté en marcha en el N100 (`docker ps`). Comprueba que el archivo `sonda.env` del móvil tenga la contraseña correcta.

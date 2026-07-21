@@ -631,6 +631,7 @@
 
         let client = null;
         let lastMessageTime = 0;
+        let lastMobilePing = 0;
 
         // Coordenadas de la rampa para el cálculo de recorrido (se memorizan al despegar)
         let launchpadLat = null;
@@ -660,10 +661,12 @@
                 updateConnectionState(true);
 
                 if (topic === 'sonda/status') {
+                    lastMobilePing = Date.now();
                     handleSondaStatus(payload);
                 } else if (topic === 'gps/data') {
                     handleGpsData(payload);
                 } else if (topic === 'sonda/camera') {
+                    lastMobilePing = Date.now();
                     handleIaCamera(payload);
                 }
             });
@@ -673,7 +676,7 @@
 
         // Control del estado ONLINE/OFFLINE
         setInterval(() => {
-            if (Date.now() - lastMessageTime > 15000) {
+            if (Date.now() - lastMessageTime > 20000) {
                 updateConnectionState(false);
             }
         }, 5000);
@@ -683,7 +686,8 @@
             const text = document.getElementById('conn-text');
             if (connected) {
                 dot.classList.add('online');
-                text.textContent = 'TELEMETRÍA ONLINE';
+                const isMobileActive = (Date.now() - lastMobilePing < 20000);
+                text.textContent = isMobileActive ? 'TELEMETRÍA MÓVIL (4G)' : 'TELEMETRÍA LORA (868MHz)';
                 text.style.color = 'var(--green-accent)';
             } else {
                 dot.classList.remove('online');
@@ -692,82 +696,112 @@
             }
         }
 
-        // 2. Procesar sonda/status (Fase de rampa)
+        // 2. Procesar sonda/status (Fase de rampa / diagnóstico del móvil)
         function handleSondaStatus(data) {
-            if (data.level !== undefined) {
-                updateGauge('ring-temp', data.temp, -40, 50); // Mapeo de temperatura
-                document.getElementById('val-temp').textContent = data.temp.toFixed(1);
-            }
-            if (data.lat !== undefined && data.lat !== null && data.lat !== "null") {
-                // Guardar coordenadas de la rampa por primera vez
-                if (launchpadLat === null) {
-                    launchpadLat = parseFloat(data.lat);
-                    launchpadLng = parseFloat(data.lng);
+            lastMobilePing = Date.now();
+            if (data.temp !== undefined && data.temp !== null && data.temp !== "null") {
+                const tempNum = parseFloat(data.temp);
+                if (!isNaN(tempNum)) {
+                    updateGauge('ring-temp', tempNum, -40, 50);
+                    document.getElementById('val-temp').textContent = tempNum.toFixed(1);
                 }
-                updateSondaLocation(parseFloat(data.lat), parseFloat(data.lng), parseFloat(data.alt), parseFloat(data.accuracy));
+            }
+            
+            const lat = parseFloat(data.lat);
+            const lng = parseFloat(data.lng);
+            const altRaw = data.alt !== undefined ? data.alt : data.altitude;
+            const alt = parseFloat(altRaw);
+            
+            if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                if (launchpadLat === null) {
+                    launchpadLat = lat;
+                    launchpadLng = lng;
+                }
+                const altNum = !isNaN(alt) ? alt : 0;
+                updateSondaLocation(lat, lng, altNum, parseFloat(data.accuracy || 0));
             }
         }
 
-        // 3. Procesar gps/data (Fase de vuelo)
+        // 3. Procesar gps/data (Fase de vuelo / Móvil 4G vs LoRa 868MHz)
         function handleGpsData(data) {
-            if (data.lat !== undefined && data.lat !== null && data.lat !== "null") {
-                // Si despegó sin datos previos de rampa, memorizar ubicación actual
+            const isFromMobile = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null");
+            const isMobileActive = (Date.now() - lastMobilePing < 20000);
+            
+            if (isFromMobile) {
+                lastMobilePing = Date.now();
+            }
+
+            // Si el mensaje viene de LoRa pero el Móvil 4G sigue online, dejamos que el Móvil 4G mantenga la prioridad principal
+            if (!isFromMobile && isMobileActive) {
+                return; // Móvil 4G activo: mantener telemetría móvil en el HUD
+            }
+
+            const lat = parseFloat(data.lat);
+            const lng = parseFloat(data.lng);
+            const altRaw = data.altitude !== undefined ? data.altitude : data.alt;
+            const alt = parseFloat(altRaw);
+            const speedKmh = parseFloat(data.speed || 0);
+
+            if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
                 if (launchpadLat === null) {
-                    launchpadLat = parseFloat(data.lat);
-                    launchpadLng = parseFloat(data.lng);
+                    launchpadLat = lat;
+                    launchpadLng = lng;
                 }
                 
-                // Procesar velocidad real (KM/H) emitida por el receptor LoRa
-                let speedKmh = parseFloat(data.speed || 0);
-                updateGauge('ring-speed', speedKmh, 0, 120); // Mapeo velocidad máx 120 km/h
-                document.getElementById('val-speed').textContent = speedKmh.toFixed(1);
+                const speedNum = !isNaN(speedKmh) ? speedKmh : 0;
+                updateGauge('ring-speed', speedNum, 0, 120);
+                document.getElementById('val-speed').textContent = speedNum.toFixed(1);
 
-                let courseDeg = (data.course !== undefined && data.course !== null) ? parseFloat(data.course) : null;
-                updateSondaLocation(parseFloat(data.lat), parseFloat(data.lng), parseFloat(data.altitude || 0), parseFloat(data.accuracy || 0), courseDeg);
+                const courseDeg = (data.course !== undefined && data.course !== null && !isNaN(parseFloat(data.course))) ? parseFloat(data.course) : null;
+                const altNum = !isNaN(alt) ? alt : 0;
+
+                updateSondaLocation(lat, lng, altNum, parseFloat(data.accuracy || 0), courseDeg);
             }
         }
 
         // 4. Actualizar ubicación, calcular recorrido, rumbo, presión y actualizar el perfil de la curva
         function updateSondaLocation(lat, lng, alt, accuracy, courseDeg = null) {
+            const safeAlt = (!isNaN(alt) && alt !== null) ? alt : 0;
+
             // A. Altitud (M o KM estilo SpaceX)
             const altValEl = document.getElementById('val-alt');
             const altUnitEl = document.getElementById('val-alt-unit');
             
-            if (alt >= 1000) {
-                const altKm = alt / 1000.0;
+            if (safeAlt >= 1000) {
+                const altKm = safeAlt / 1000.0;
                 altValEl.textContent = altKm.toFixed(2);
                 altUnitEl.textContent = 'KM';
-                // Llenar el anillo de altitud (Mapeamos hasta el apogeo máximo estimado de la sonda, ej: 30.000m / 30km)
                 updateGauge('ring-alt', altKm, 0, 30);
             } else {
-                altValEl.textContent = Math.round(alt);
+                altValEl.textContent = Math.round(safeAlt);
                 altUnitEl.textContent = 'M';
-                updateGauge('ring-alt', alt, 0, 1000);
+                updateGauge('ring-alt', safeAlt, 0, 1000);
             }
 
             // B. Presión atmosférica calculada con fórmula barométrica estándar
-            // P = P0 * (1 - L*h/T0)^(g*M/(R*L))
-            const pressureHpa = 1013.25 * Math.pow(1 - 0.0065 * alt / 288.15, 5.25588);
-            document.getElementById('val-pres').textContent = Math.round(pressureHpa);
-            // El anillo de presión se vacía al subir (1013 hPa = 100%, 0 hPa = 0%)
-            updateGauge('ring-pres', pressureHpa, 0, 1013);
+            const pressureHpa = 1013.25 * Math.pow(1 - 0.0065 * safeAlt / 288.15, 5.25588);
+            const safePres = !isNaN(pressureHpa) ? Math.round(pressureHpa) : 1013;
+            document.getElementById('val-pres').textContent = safePres;
+            updateGauge('ring-pres', safePres, 0, 1013);
 
             // C. Recorrido (Distancia de la rampa en KM)
-            if (launchpadLat !== null) {
+            if (launchpadLat !== null && !isNaN(lat) && !isNaN(lng)) {
                 const distanceKm = getHaversineDistance(launchpadLat, launchpadLng, lat, lng);
-                document.getElementById('val-recorrido').textContent = distanceKm.toFixed(2) + ' KM';
+                const safeDist = !isNaN(distanceKm) ? distanceKm : 0;
+                document.getElementById('val-recorrido').textContent = safeDist.toFixed(2) + ' KM';
 
                 // D. Dirección (Rumbo en grados y cardinal)
                 let bearingDeg = courseDeg;
                 if (bearingDeg === null || isNaN(bearingDeg)) {
                     bearingDeg = getBearing(launchpadLat, launchpadLng, lat, lng);
                 }
-                const cardinal = getCardinalDirection(bearingDeg);
-                document.getElementById('val-direccion').textContent = `${Math.round(bearingDeg)}° ${cardinal}`;
+                const safeBearing = !isNaN(bearingDeg) ? bearingDeg : 0;
+                const cardinal = getCardinalDirection(safeBearing);
+                document.getElementById('val-direccion').textContent = `${Math.round(safeBearing)}° ${cardinal}`;
             }
 
             // E. Mover el indicador dinámico en la trayectoria del centro (0 a 30.000m)
-            updateTrajectoryCurve(alt);
+            updateTrajectoryCurve(safeAlt);
         }
 
         // 5. Procesar descripciones de la IA

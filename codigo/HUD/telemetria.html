@@ -630,6 +630,7 @@
 
         const mqttUser = urlParams.get('mqtt_user') || 'admin';
         const mqttPass = urlParams.get('mqtt_pass') || 'AWLCxdfGxwohHF2qpScJLK9AbRAFxD';
+        const targetDeviceID = urlParams.get('device_id') || 'movil_sonda_1';
 
         let client = null;
         let lastMessageTime = 0;
@@ -652,28 +653,32 @@
 
             client.on('connect', () => {
                 console.log('HUD conectado a MQTT en:', mqttUrl);
-                client.subscribe('sonda/status');
-                client.subscribe('gps/data');
-                client.subscribe('sonda/camera');
+                // Suscribirse dinámicamente a los topics del móvil seleccionado
+                client.subscribe(`sonda/mobile/${targetDeviceID}/status`);
+                client.subscribe(`sonda/mobile/${targetDeviceID}/camera`);
+                client.subscribe(`sonda/mobile/${targetDeviceID}/telemetry`);
+                // Suscribirse a la telemetría de radio LoRa (cualquier ID)
+                client.subscribe('sonda/lora/+/telemetry');
             });
 
             client.on('message', (topic, message) => {
                 const payload = JSON.parse(message.toString());
                 lastMessageTime = Date.now();
 
-                if (topic === 'sonda/status' || topic === 'sonda/camera') {
+                const topicParts = topic.split('/');
+
+                if (topic === `sonda/mobile/${targetDeviceID}/status`) {
                     lastMobilePing = Date.now();
-                    if (topic === 'sonda/status') handleSondaStatus(payload);
-                    if (topic === 'sonda/camera') handleIaCamera(payload);
-                } else if (topic === 'gps/data') {
-                    // Si no contiene el campo 'date' característico de LoRa, es del móvil
-                    const isFromMobile = (payload.date === undefined || payload.accuracy !== undefined);
-                    if (isFromMobile) {
-                        lastMobilePing = Date.now();
-                    } else {
-                        lastLoraPing = Date.now();
-                    }
-                    handleGpsData(payload, isFromMobile);
+                    handleSondaStatus(payload);
+                } else if (topic === `sonda/mobile/${targetDeviceID}/camera`) {
+                    lastMobilePing = Date.now();
+                    handleIaCamera(payload);
+                } else if (topic === `sonda/mobile/${targetDeviceID}/telemetry`) {
+                    lastMobilePing = Date.now();
+                    handleGpsData(payload, true);
+                } else if (topicParts[0] === 'sonda' && topicParts[1] === 'lora' && topicParts[3] === 'telemetry') {
+                    lastLoraPing = Date.now();
+                    handleGpsData(payload, false);
                 }
 
                 // Llamar a updateConnectionState DESPUÉS de haber registrado las marcas de tiempo

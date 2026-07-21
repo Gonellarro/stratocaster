@@ -208,3 +208,36 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
   * Regenerados certificados SSL para Mosquitto (`openssl`).
   * Corregida la propiedad del directorio SQLite de Grafana (`sudo chown -R 472:472 docker-TIG/grafana` / `chmod -R 777`).
   * Desplegada y verificada la pila en el servidor en producción.
+
+---
+
+**Fecha:** 2026-07-21  
+**Sesión:** Sincronización del tiempo de misión, priorización de telemetría LoRa, detección dinámica de enlaces en rampa y rediseño de alertas del HUD de OBS.
+
+## 1. Sincronización Temporal del Lanzamiento
+* **Cronómetro Unificado (`app.py`):** Corregido el desfase de tiempo de misión entre el Dashboard y el HUD de OBS. Ahora, el tiempo de misión (`timestamp_mision`) se mantiene a cero en el estado `armando` (Listo para el despegue) y se inicializa de forma sincronizada en el momento exacto en que el operador inicia la cuenta atrás de 10 segundos (`action = ok`).
+
+## 2. Redundancia Aeroespacial y Failover de Telemetría (LoRa Prioritario)
+* **HUD de OBS (`telemetria.html`):**
+  * Modificada la lógica de ingesta de datos para dar **prioridad absoluta a la radio LoRa (868MHz)** para la altitud, velocidad, rumbo y curva de trayectoria. El GPS del móvil actúa como respaldo inicial en rampa, pero una vez que LoRa transmite su primer paquete, el HUD se alimenta 100% de la radio debido a su mayor precisión configurada para cotas estratosféricas (`dynModel = 6` en el u-blox).
+  * Implementado un parseo seguro anti-NaN unificando el campo de altitud (`alt` y `altitude`) y barriendo valores indeterminados a `0` para que no rompan las fórmulas barométricas teóricas de presión.
+* **Dashboard de Control (`telemetry.js`):**
+  * Sincronizado el volcado dinámico: si el teléfono móvil pierde la cobertura 4G en pleno ascenso, los paneles principales de posición (Lat/Lng), altitud, velocidad y rumbo pasan a actualizarse inmediatamente usando los datos de radio LoRa para que el operador no pierda la visibilidad del vuelo.
+
+## 3. Detección Dinámica de Enlaces y Watchdogs Inteligentes
+* **Checklist en Rampa (`control.html`, `ui.js`, `state.js`, `checklist.js`):**
+  * Cambiado el check de LoRa para que no esté forzado en verde como "Omitido". Ahora inicia en rojo (`Sin Enlace`).
+  * En cuanto se recibe la primera publicación de `RXLora` en MQTT (`gps/data` sin la marca de precisión de Android), el checklist cambia dinámicamente a verde (`En Línea (868MHz)`).
+  * Ajustado el Watchdog del receptor LoRa a **120 segundos (2 minutos)** para soportar la cadencia espaciada de transmisión por radio sin que la luz del enlace parpadee falsamente a rojo.
+  * Ajustado el Watchdog del teléfono a **35 segundos en vuelo** para dar margen al cambio de Wi-Fi a datos móviles 4G sin marcar falsas pérdidas de cobertura.
+  * Añadidos registros en la consola de eventos al perder y recuperar la conexión móvil.
+
+## 4. Rediseño del HUD (Evitar Solapamientos y Alertas Independientes)
+* **Ajuste de Caja de IA (`telemetria.html`):** Eliminada la caja flotante de descripción de IA del HUD de OBS para limpiar la visual de la emisión en Twitch (estos mensajes se siguen visualizando únicamente en la web de control).
+* **Indicadores Flotantes Independientes (`telemetria.html`):**
+  * Creada una nueva caja con estilo *glassmorphism* flotando a `top: -55px` (sobre el velocímetro) para evitar solapamientos.
+  * Muestra dos luces de estado desacopladas:
+    1. **Vídeo Móvil 4G:** Alterna entre `VÍDEO ONLINE MÓVIL 4G` (verde) y `VÍDEO OFFLINE MÓVIL 4G` (rojo si el script suspende Chrome por falta de cobertura).
+    2. **Telemetría:** Alterna entre `TELEMETRÍA MÓVIL (4G)`, `TELEMETRÍA LORA (868MHz)` y `TELEMETRÍA OFFLINE` según la actividad de los canales.
+* **Sonda Móvil (`sonda_loop.sh`):** Corregida la periodicidad de telemetría en Fase 1 (Ignición) para enviar paquetes de presencia a Mosquitto de forma ininterrumpida cada 5 segundos y evitar que el Dashboard o el HUD lo declaren fuera de línea.
+

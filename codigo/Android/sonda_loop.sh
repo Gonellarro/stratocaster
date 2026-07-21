@@ -21,6 +21,18 @@ if [ -f "$CONFIG_FILE" ]; then
     source "$CONFIG_FILE"
 fi
 
+# Definir valores predeterminados e identificador de dispositivo
+if [ -z "$DEVICE_ID" ]; then
+    DEVICE_ID="movil_sonda_1"
+fi
+
+# Canales MQTT dinámicos basados en la arquitectura multi-dispositivo
+TOPIC_STATUS="sonda/mobile/$DEVICE_ID/status"
+TOPIC_TELEMETRY="sonda/mobile/$DEVICE_ID/telemetry"
+TOPIC_CAMERA="sonda/mobile/$DEVICE_ID/camera"
+TOPIC_COMMAND="sonda/mobile/$DEVICE_ID/command"
+
+
 # Asegurar la existencia de directorios de salida
 mkdir -p "$HOME/imagenes"
 
@@ -99,7 +111,7 @@ handle_command() {
             ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
             ACC=$(echo "$LOC_JSON" | jq -r '.accuracy // "null"')
             
-            # 3. Publicar reporte en sonda/status
+            # 3. Publicar reporte en topic de estado del dispositivo
             STATUS_PAYLOAD=$(jq -n \
               --argjson lvl "$BAT_LVL" \
               --argjson tmp "$BAT_TEMP" \
@@ -109,12 +121,12 @@ handle_command() {
               --argjson acc "$ACC" \
               '{status: "diagnostico", level: $lvl, temp: $tmp, lat: $lat, lng: $lng, alt: $alt, accuracy: $acc}')
               
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m "$STATUS_PAYLOAD"
+            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m "$STATUS_PAYLOAD"
             ;;
             
         "init_gps")
             echo "[🛰️ GPS] Iniciando receptor GPS..."
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "gps_initializing"}'
+            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "gps_initializing"}'
             timeout 5 termux-tts-speak "Iniciando búsqueda de satélites GPS." 2>/dev/null
             
             sleep 2
@@ -132,16 +144,16 @@ handle_command() {
                   --argjson acc "$ACC" \
                   '{status: "gps_ok", lat: $lat, lng: $lng, alt: $alt, accuracy: $acc}')
                   
-                mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m "$STATUS_PAYLOAD"
+                mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m "$STATUS_PAYLOAD"
                 timeout 5 termux-tts-speak "Señal de GPS fijada correctamente." 2>/dev/null
             else
-                mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "gps_failed"}'
+                mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "gps_failed"}'
                 timeout 5 termux-tts-speak "Error al fijar señal de GPS." 2>/dev/null
             fi
             ;;
             
         "test_audio")
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "audio_ok"}'
+            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "audio_ok"}'
             timeout 5 termux-tts-speak "Sonda en línea y lista para la comprobación." 2>/dev/null
             ;;
             
@@ -149,7 +161,7 @@ handle_command() {
             echo "[📹 VIDEO] Test de vídeo: Iniciando streaming..."
             touch "$VIDEO_FLAG"
             am start -a android.intent.action.VIEW -d "https://vdo.ninja/?push=sonda_stratocaster&webcam&facing=back&autostart&noaudio&videobitrate=1000&quality=2&nopreview&clean" &>/dev/null
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "video_streaming_on"}'
+            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "video_streaming_on"}'
             ;;
             
         "test_video_off")
@@ -158,12 +170,12 @@ handle_command() {
             am force-stop flutter.vdo.ninja &>/dev/null
             am force-stop com.android.chrome &>/dev/null
             am force-stop com.wmspanel.larix_broadcaster &>/dev/null
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "video_streaming_off"}'
+            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "video_streaming_off"}'
             ;;
             
         "test_photo")
             echo "[📸 CÁMARA] Solicitud de test de foto..."
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "camera_testing"}'
+            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "camera_testing"}'
             
             RELAUNCH_VIDEO=0
             if [ -f "$VIDEO_FLAG" ]; then
@@ -194,7 +206,7 @@ handle_command() {
                 ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
                 
                 echo "[📸 CÁMARA] Subiendo foto de test a la web..."
-                UPLOAD_RESP=$(curl -s -F "file=@$TARGET_IMG" -F "texto=$TEXTO_DETECTADO" "$IMAGE_SERVER_URL/upload")
+                UPLOAD_RESP=$(curl -s -F "file=@$TARGET_IMG" -F "texto=$TEXTO_DETECTADO" -F "device_id=$DEVICE_ID" "$IMAGE_SERVER_URL/upload")
                 
                 if [ $? -eq 0 ] && [ -n "$UPLOAD_RESP" ] && [[ "$UPLOAD_RESP" != *"Error"* ]]; then
                     FILENAME="$UPLOAD_RESP"
@@ -208,14 +220,14 @@ handle_command() {
                       --argjson alt "$ALT" \
                       '{texto: $txt, url_imagen: $url, lat: $lat, lng: $lng, alt: $alt}')
                     
-                    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$MQTT_TOPIC" -m "$PAYLOAD"
+                    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_CAMERA" -m "$PAYLOAD"
                     timeout 5 termux-tts-speak "Comprobación de cámara completada con éxito." 2>/dev/null
                 else
                     echo "[❌ ERROR] Falló la subida de la foto de test: $UPLOAD_RESP"
-                    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "camera_error"}'
+                    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "camera_error"}'
                 fi
             else
-                mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "camera_capture_failed"}'
+                mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "camera_capture_failed"}'
             fi
             ;;
             
@@ -228,7 +240,7 @@ handle_command() {
             
         "arm")
             # 1. Notificar armado por MQTT
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "armed"}'
+            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "armed"}'
             
             echo "[🛰️ NET] Sonda Armada. Esperando cuenta atrás..."
             timeout 5 termux-tts-speak "Sonda Armada. Lista para el lanzamiento." 2>/dev/null
@@ -252,7 +264,7 @@ handle_command() {
             timeout 5 termux-tts-speak "Lanzamiento abortado. Volviendo a modo de espera." 2>/dev/null
             sleep 1
             
-            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m '{"status": "aborted"}'
+            mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m '{"status": "aborted"}'
             ;;
     esac
 }
@@ -262,7 +274,7 @@ handle_command() {
 # ==============================================================================
 echo "====================================================="
 echo "  [FASE 0] Iniciando receptor de comandos pre-vuelo..."
-echo "  Suscrito a sonda/comando. Esperando diagnóstico..."
+echo "  Suscrito a $TOPIC_COMMAND. Esperando diagnóstico..."
 echo "====================================================="
 
 rm -f "$ARMED_FLAG"
@@ -270,7 +282,7 @@ rm -f "$VIDEO_FLAG"
 
 # Suscriptor MQTT de fondo
 (
-    mosquitto_sub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/comando" 2>/dev/null | while read -r line; do
+    mosquitto_sub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_COMMAND" 2>/dev/null | while read -r line; do
         CMD=$(echo "$line" | jq -r '.cmd // empty')
         if [ -n "$CMD" ]; then
             handle_command "$CMD" </dev/null &
@@ -338,7 +350,7 @@ while true; do
       --argjson alt "$ALT" \
       --argjson acc "$ACC" \
       '{lat: $lat, lng: $lng, altitude: $alt, accuracy: $acc}')
-    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "gps/data" -m "$GPS_PAYLOAD"
+    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_TELEMETRY" -m "$GPS_PAYLOAD"
     echo "[📡 TELEMETRÍA] Enviada: Alt: $ALT m, Acc: $ACC m"
     
     ALT_INT=${ALT%.*}
@@ -430,7 +442,7 @@ while true; do
           --argjson accuracy "$ACC" \
           '{"status": "diagnostico", "level": $level, "temp": $temp, "lat": $lat, "lng": $lng, "alt": $alt, "accuracy": $accuracy}')
 
-        mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "sonda/status" -m "$PAYLOAD" &>/dev/null &
+        mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_STATUS" -m "$PAYLOAD" &>/dev/null &
         echo "[🛰️ NET] [$(date +%T)] Telemetría enviada por MQTT."
     else
         # Sin cobertura: Si el directo de Chrome está corriendo, lo matamos para salvar batería
@@ -472,7 +484,7 @@ while true; do
 
             if [ "$COBERTURA" -eq 1 ]; then
                 echo "[$(date +%T)] 📤 Subiendo foto original al servidor..."
-                UPLOAD_RESP=$(curl -s -F "file=@$TARGET_IMG" -F "texto=$TEXTO_DETECTADO" "$IMAGE_SERVER_URL/upload")
+                UPLOAD_RESP=$(curl -s -F "file=@$TARGET_IMG" -F "texto=$TEXTO_DETECTADO" -F "device_id=$DEVICE_ID" "$IMAGE_SERVER_URL/upload")
 
                 if [ $? -eq 0 ] && [ -n "$UPLOAD_RESP" ] && [[ "$UPLOAD_RESP" != *"Error"* ]]; then
                     FILENAME="$UPLOAD_RESP"
@@ -487,7 +499,7 @@ while true; do
                       --argjson alt "$ALT" \
                       '{texto: $txt, url_imagen: $url, lat: $lat, lng: $lng, alt: $alt}')
 
-                    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$MQTT_TOPIC" -m "$PAYLOAD"
+                    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_CAMERA" -m "$PAYLOAD"
                 else
                     echo "[❌ ERROR] Falló la subida de foto: $UPLOAD_RESP"
                     echo "[$(date +%Y-%m-%d\ %H:%M:%S)] [OFFLINE_ERR] Lat: $LAT, Lng: $LNG, Alt: $ALT, Archivo: sonda_$TIMESTAMP.jpg" >> "$OFFLINE_LOG"

@@ -16,7 +16,7 @@
 // -----------------------------------------------------------------------------
 
 // MQTT topic
-#define MQTT_TOPIC  "gps/data"
+#define MQTT_TOPIC  "sonda/lora/rx_sonda/telemetry"
 
 // LoRa pins (TTGO / LilyGO T-Beam typical wiring)
 #define LORA_SCK        5

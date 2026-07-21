@@ -105,10 +105,12 @@ def upload_file():
         file.save(filepath)
         
         texto = request.form.get('texto', '')
+        device_id = request.form.get('device_id', 'movil_sonda_1')
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         metadata = {
             'texto': texto,
+            'device_id': device_id,
             'timestamp': timestamp,
             'filename': unique_name
         }

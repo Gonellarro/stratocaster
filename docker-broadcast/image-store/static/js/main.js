@@ -1,10 +1,12 @@
-// MQTT Client Connection and Message Router (Orchestrator)
+// Obtener el identificador del dispositivo a controlar de los parámetros de la URL
+const urlParams = new URLSearchParams(window.location.search);
+const targetDeviceID = urlParams.get('device_id') || 'movil_sonda_1';
 
 function sendCommand(cmdName) {
     if (!client || !client.connected) return;
     const payload = JSON.stringify({ cmd: cmdName });
-    client.publish('sonda/comando', payload);
-    console.log('MQTT Publish sonda/comando:', cmdName);
+    client.publish(`sonda/mobile/${targetDeviceID}/command`, payload);
+    console.log(`MQTT Publish sonda/mobile/${targetDeviceID}/command:`, cmdName);
 }
 
 // Inicialización de Conexión MQTT
@@ -23,10 +25,15 @@ client = mqtt.connect(mqttUrl, {
 
 client.on('connect', () => {
     logMessage('ok', 'MQTT', 'Conectado al Broker MQTT.');
-    client.subscribe('sonda/status');
-    client.subscribe('sonda/camera');
-    client.subscribe('gps/data');
-    client.subscribe('sonda/meshtastic');
+    
+    // Suscripciones dinámicas específicas del dispositivo seleccionado en el control
+    client.subscribe(`sonda/mobile/${targetDeviceID}/status`);
+    client.subscribe(`sonda/mobile/${targetDeviceID}/camera`);
+    client.subscribe(`sonda/mobile/${targetDeviceID}/telemetry`);
+    
+    // Suscripciones de telemetría de radio generales (LoRa y Mesh)
+    client.subscribe('sonda/lora/+/telemetry');
+    client.subscribe('sonda/mesh/+/telemetry');
     
     // Solicitar primer reporte de estado
     sendCommand('get_status');
@@ -41,7 +48,10 @@ client.on('message', (topic, message) => {
         return;
     }
     
-    if (topic === 'sonda/status') {
+    const topicParts = topic.split('/');
+    
+    // 1. Mensajes específicos del móvil que estamos controlando/monitoreando
+    if (topic === `sonda/mobile/${targetDeviceID}/status`) {
         lastSondaPing = Date.now();
         checks.movil = true;
         updateLinkState('movil', true);
@@ -52,29 +62,31 @@ client.on('message', (topic, message) => {
             handleSondaEvent(payload);
         }
     } 
-    else if (topic === 'gps/data') {
-        if (payload.accuracy !== undefined) {
-            lastSondaPing = Date.now();
-            checks.movil = true;
-            updateLinkState('movil', true);
-            handleMobileTelemetry(payload);
-        } else {
-            lastLoraPing = Date.now();
-            checks.lora_telemetria = true;
-            updateLinkState('lora', true);
-            handleLoraTelemetry(payload);
-        }
+    else if (topic === `sonda/mobile/${targetDeviceID}/telemetry`) {
+        lastSondaPing = Date.now();
+        checks.movil = true;
+        updateLinkState('movil', true);
+        handleMobileTelemetry(payload);
     }
-    else if (topic === 'sonda/camera') {
+    else if (topic === `sonda/mobile/${targetDeviceID}/camera`) {
         lastSondaPing = Date.now();
         updateLinkState('movil', true);
         handleCameraEvent(payload);
     }
-    else if (topic === 'sonda/meshtastic') {
+    // 2. Mensajes de receptor LoRa (cualquiera bajo la estructura de subtopic)
+    else if (topicParts[0] === 'sonda' && topicParts[1] === 'lora' && topicParts[3] === 'telemetry') {
+        lastLoraPing = Date.now();
+        checks.lora_telemetria = true;
+        updateLinkState('lora', true);
+        handleLoraTelemetry(payload);
+    }
+    // 3. Mensajes de Meshtastic (el ID de nodo se extrae del topic)
+    else if (topicParts[0] === 'sonda' && topicParts[1] === 'mesh' && topicParts[3] === 'telemetry') {
         lastMeshPing = Date.now();
         checks.lora_meshtastic = true;
         updateLinkState('meshtastic', true);
-        handleMeshtasticEvent(payload);
+        const nodeId = parseInt(topicParts[2]) || payload.node_id;
+        handleMeshtasticEvent(payload, nodeId);
     }
     
     // Si la secuencia de autotest está activa, comprobar éxito del paso actual

@@ -188,14 +188,17 @@ function handleSondaEvent(data) {
     validateChecklist();
 }
 
-function handleMeshtasticEvent(data) {
-    if (data.node_id && data.rssi) {
+function handleMeshtasticEvent(data, nodeIdFromTopic = null) {
+    const nodeId = nodeIdFromTopic || data.node_id;
+    if (nodeId && data.rssi) {
         const rssiVal = data.rssi + ' dBm';
-        if (data.node_id === 1) {
+        if (nodeId === 1) {
             document.getElementById('mesh-node-1').textContent = rssiVal;
-        } else if (data.node_id === 2) {
+        } else if (nodeId === 2) {
             document.getElementById('mesh-node-2').textContent = rssiVal;
+        } else if (nodeId === 3) {
+            document.getElementById('mesh-node-3').textContent = rssiVal;
         }
-        logMessage('info', 'MESHTASTIC', 'Paquete recibido de Nodo ' + data.node_id + ' (RSSI: ' + data.rssi + 'dBm)');
+        logMessage('info', 'MESHTASTIC', 'Paquete recibido de Nodo ' + nodeId + ' (RSSI: ' + data.rssi + 'dBm)');
     }
 }

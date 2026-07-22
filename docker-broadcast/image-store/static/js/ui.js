@@ -21,41 +21,22 @@ function updateChecklistUI(id, state, labelText) {
 
 function updateLinkState(linkId, connected) {
     const badge = document.getElementById('link-' + linkId);
-    const chk = document.getElementById('chk-' + linkId);
-    const chkVal = document.getElementById('chk-' + linkId + '-val');
     
     if (connected) {
         if (badge) {
             badge.textContent = 'Conectado';
             badge.className = 'link-badge connected';
         }
-        if (chk) {
-            chk.className = 'checklist-item ok';
-            chkVal.textContent = (linkId === 'lora') ? 'En Línea (868MHz)' : 'Conexión Estable';
-        }
         if (linkId === 'movil') {
             const lastPingEl = document.getElementById('sys-last-ping');
             if (lastPingEl) {
                 lastPingEl.textContent = new Date().toLocaleTimeString();
-            }
-            if (checks.movil === false) {
-                logMessage('ok', 'CONEXIÓN', 'Cobertura 4G de la Sonda Móvil recuperada (transmisión en directo reanudada).');
             }
         }
     } else {
         if (badge) {
             badge.textContent = 'Desconectado';
             badge.className = 'link-badge disconnected';
-        }
-        if (chk) {
-            // Solo Meshtastic permanece omitido directamente si no está conectado
-            if (linkId === 'meshtastic') {
-                chk.className = 'checklist-item ok';
-                chkVal.textContent = 'Omitido';
-            } else {
-                chk.className = 'checklist-item ko';
-                chkVal.textContent = 'Sin Enlace';
-            }
         }
     }
 }

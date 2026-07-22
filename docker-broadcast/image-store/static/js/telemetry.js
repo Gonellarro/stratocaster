@@ -119,16 +119,18 @@ function handleCameraEvent(data) {
     }
     logMessage('ok', 'CÁMARA', 'Nueva foto procesada por IA: "' + data.texto + '"');
     
-    checks.camera_foto = true;
-    updateChecklistUI('chk-foto', true, 'Foto & IA Confirmada');
-    validateChecklist();
+    if (isSequenceRunning) {
+        checks.camera_foto = true;
+        updateChecklistUI('chk-foto', true, 'Foto & IA Confirmada');
+    }
 }
 
 function handleSondaEvent(data) {
     if (data.status === 'gps_initializing') {
-        updateChecklistUI('chk-gps', 'testing', 'Buscando satélites...');
+        if (isSequenceRunning) updateChecklistUI('chk-gps', 'testing', 'Buscando satélites...');
         logMessage('warn', 'GPS', 'Iniciando búsqueda activa de satélites GPS...');
     } else if (data.status === 'gps_ok') {
+        // Siempre actualizar datos de telemetría en la UI
         if (data.lat !== undefined && data.lat !== null && data.lat !== 'null') {
             document.getElementById('td-m-lat').textContent = parseFloat(data.lat).toFixed(5);
             document.getElementById('td-m-lng').textContent = parseFloat(data.lng).toFixed(5);
@@ -139,22 +141,31 @@ function handleSondaEvent(data) {
             document.getElementById('mini-gps').textContent = 'Acc: ' + (data.accuracy || '--') + 'm';
             updateMapCoordinates('movil', data.lat, data.lng);
         }
-        checks.gps = true;
-        const accText = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null" && data.accuracy !== 0) ? ' (' + parseFloat(data.accuracy).toFixed(1) + 'm)' : '';
-        updateChecklistUI('chk-gps', 'ok', 'Fijo' + accText);
+        // Solo marcar el checklist si el autotest está corriendo
+        if (isSequenceRunning) {
+            checks.gps = true;
+            const accText = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null" && data.accuracy !== 0) ? ' (' + parseFloat(data.accuracy).toFixed(1) + 'm)' : '';
+            updateChecklistUI('chk-gps', 'ok', 'Fijo' + accText);
+        }
         logMessage('ok', 'GPS', 'Señal de GPS fijada (Precisión: ' + (data.accuracy || '--') + 'm).');
     } else if (data.status === 'gps_failed') {
-        checks.gps = false;
-        updateChecklistUI('chk-gps', 'ko', 'Fallo Fijación');
+        if (isSequenceRunning) {
+            checks.gps = false;
+            updateChecklistUI('chk-gps', 'ko', 'Fallo Fijación');
+        }
         logMessage('err', 'GPS', 'Fallo al fijar señal GPS.');
     } else if (data.status === 'audio_ok') {
-        checks.audio = true;
-        updateChecklistUI('chk-audio', 'ok', 'Confirmado');
+        if (isSequenceRunning) {
+            checks.audio = true;
+            updateChecklistUI('chk-audio', 'ok', 'Confirmado');
+        }
         logMessage('ok', 'AUDIO', 'Prueba de altavoz confirmada en el móvil.');
     } else if (data.status === 'video_streaming_on') {
         streamActive = true;
-        checks.camera_video = true;
-        updateChecklistUI('chk-video', 'ok', 'Transmitiendo');
+        if (isSequenceRunning) {
+            checks.camera_video = true;
+            updateChecklistUI('chk-video', 'ok', 'Transmitiendo');
+        }
         const streamBtn = document.getElementById('btn-stream-switch');
         if (streamBtn) {
             streamBtn.textContent = '🔌 DETENER VÍDEO';
@@ -174,13 +185,14 @@ function handleSondaEvent(data) {
     } else if (data.status === 'camera_testing') {
         logMessage('info', 'CÁMARA', 'Móvil procesando test de foto local con la IA...');
     } else if (data.status === 'camera_error' || data.status === 'camera_capture_failed') {
-        checks.camera_foto = false;
-        updateChecklistUI('chk-foto', 'ko', 'Fallo de cámara');
+        if (isSequenceRunning) {
+            checks.camera_foto = false;
+            updateChecklistUI('chk-foto', 'ko', 'Fallo de cámara');
+        }
         logMessage('err', 'CÁMARA', 'Error al disparar la cámara o procesar con llama.cpp.');
     } else if (data.status === 'armed') {
         logMessage('ok', 'MISIÓN', '¡Sonda Armada! Bloqueando cambios terrestres.');
     }
-    validateChecklist();
 }
 
 function handleMeshtasticEvent(data, nodeIdFromTopic = null) {

@@ -140,8 +140,12 @@ def change_launch_status():
 
 @app.route('/control_lanzamiento/ok', methods=['POST'])
 def sonda_confirm_ok():
-    """Endpoint directo para que el móvil de la sonda confirme que está listo para el lanzamiento."""
+    """Endpoint directo para que el móvil de la sonda confirme que está listo para el lanzamiento.
+    Solo transiciona a 'cuenta_atras' si el estado actual es 'armando', evitando
+    que llamadas repetidas del móvil reinicien la cuenta atrás en bucle."""
     global LAUNCH_STATE
+    if LAUNCH_STATE['estado'] != 'armando':
+        return jsonify({'status': 'ignored', 'message': f"Estado actual es '{LAUNCH_STATE['estado']}', no 'armando'."}), 200
     LAUNCH_STATE['estado'] = 'cuenta_atras'
     LAUNCH_STATE['timestamp_inicio'] = time.time()
     LAUNCH_STATE['tiempo_restante'] = 10

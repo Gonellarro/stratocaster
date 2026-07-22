@@ -3,13 +3,25 @@ import uuid
 import json
 import datetime
 import time
-from flask import Flask, request, send_from_directory, render_template, jsonify
+from functools import wraps
+from flask import Flask, request, send_from_directory, render_template, jsonify, session, redirect, url_for
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
+
+# Configuración de sesión y directorios
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'stratocaster_secret_key_2026_change_me')
 UPLOAD_FOLDER = '/app/images'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Credenciales de Administrador (leídas de variables de entorno o valores por defecto)
+CONTROL_USER = os.environ.get('CONTROL_USER', 'admin')
+CONTROL_PASS = os.environ.get('CONTROL_PASS', 'admin')
+
+# Credenciales MQTT del Broker a inyectar en las vistas autenticadas
+MQTT_USER = os.environ.get('TELEGRAF_MQTT_USER', 'admin')
+MQTT_PASS = os.environ.get('TELEGRAF_MQTT_PASSWORD', 'AWLCxdfGxwohHF2qpScJLK9AbRAFxD')
 
 # Estado global del lanzamiento (en memoria)
 LAUNCH_STATE = {
@@ -18,6 +30,24 @@ LAUNCH_STATE = {
     'timestamp_inicio': 0.0,
     'timestamp_mision': 0.0
 }
+
+def login_required(f):
+    """Decorador para proteger rutas HTML exigiendo sesión activa de administrador."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in'):
+            return redirect(url_for('login_view', next=request.url))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def api_auth_required(f):
+    """Decorador para proteger endpoints de la API REST."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in'):
+            return jsonify({'error': 'Unauthorized', 'message': 'Se requiere iniciar sesión en la consola'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
 
 @app.after_request
 def add_cors_headers(response):
@@ -28,6 +58,34 @@ def add_cors_headers(response):
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
     return response
+
+# ------------------------------------------------------------------------------
+# AUTENTICACIÓN & LOGIN
+# ------------------------------------------------------------------------------
+
+@app.route('/login', methods=['GET', 'POST'])
+def login_view():
+    if request.method == 'POST':
+        user = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        
+        if user == CONTROL_USER and password == CONTROL_PASS:
+            session['logged_in'] = True
+            session['user'] = user
+            next_url = request.args.get('next') or url_for('control_panel')
+            return redirect(next_url)
+        else:
+            return render_template('login.html', error='Usuario o contraseña incorrectos.')
+            
+    if session.get('logged_in'):
+        return redirect(url_for('control_panel'))
+        
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login_view'))
 
 # ------------------------------------------------------------------------------
 # ENDPOINTS DE CONTROL DE LANZAMIENTO (API REST)
@@ -51,6 +109,7 @@ def get_launch_status():
     return jsonify(LAUNCH_STATE)
 
 @app.route('/control_lanzamiento', methods=['POST'])
+@api_auth_required
 def change_launch_status():
     global LAUNCH_STATE
     data = request.json or {}
@@ -62,7 +121,6 @@ def change_launch_status():
         LAUNCH_STATE['timestamp_inicio'] = 0.0
         LAUNCH_STATE['timestamp_mision'] = 0.0
     elif action == 'ok':
-        # La sonda confirma estar lista. Arrancamos la cuenta atrás real y la marca de tiempo de misión.
         now = time.time()
         LAUNCH_STATE['estado'] = 'cuenta_atras'
         LAUNCH_STATE['timestamp_inicio'] = now
@@ -133,7 +191,12 @@ def uploaded_file(filename):
 # VISTAS WEB (INTERFACES HTML)
 # ------------------------------------------------------------------------------
 
+@app.route('/')
+def index():
+    return redirect(url_for('control_panel'))
+
 @app.route('/fotos')
+@login_required
 def list_photos():
     fotos = []
     for file in os.listdir(app.config['UPLOAD_FOLDER']):
@@ -147,7 +210,6 @@ def list_photos():
                     with open(meta_path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
                         texto = data.get('texto', 'Sin descripción').strip()
-                        # Sanitizar saltos de línea y comillas para evitar romper el JavaScript inline de la galería
                         texto = texto.replace('\n', ' ').replace('\r', ' ').replace("'", "&#39;").replace('"', '&quot;')
                         timestamp = data.get('timestamp', 'Fecha desconocida')
                 except Exception:
@@ -181,8 +243,9 @@ def last_image():
         return str(e), 500
 
 @app.route('/control')
+@login_required
 def control_panel():
-    return render_template('control.html')
+    return render_template('control.html', mqtt_user=MQTT_USER, mqtt_pass=MQTT_PASS)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

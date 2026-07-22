@@ -273,3 +273,18 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
   * Eliminados los archivos basura y versiones obsoletas de firmwares LoRa (`old/`, `old2/`, `TXLora_old/`).
   * Creado el archivo [README.md](file:///home/marti/Documentos/Personal/Sonda/README.md) principal en la raíz con diagramas de flujo interactivos de Mermaid.
 
+
+---
+
+<a name="sesion-2026-07-22"></a>
+**Fecha:** 2026-07-22  
+**Sesión:** Implementación de la Autenticación de Operador, Protección de Rutas Flask e Inyección Segura de Credenciales MQTT.
+
+## 1. Sistema de Autenticación del Operador
+* **Vista de Login (`login.html` & `app.py`):** Creada una pantalla de inicio de sesión con estética *space dark glassmorphism* para acceder a la estación de control. Las credenciales de administrador se validan mediante la variable de entorno `CONTROL_USER` y `CONTROL_PASS` (por defecto `admin` / `admin`).
+* **Gestión de Sesiones (Cookies Firmadas):** Flask genera una cookie de sesión encriptada criptográficamente con `app.secret_key`. Todas las rutas protegidas (`/control`, `/fotos`) usan el decorador `@login_required` para redirigir automáticamente a `/login` si el usuario no tiene sesión iniciada.
+* **Protección de API REST:** Aplicado el decorador `@api_auth_required` a las rutas críticas de control de despegue ([/control_lanzamiento](file:///home/marti/Documentos/Personal/Sonda/docker-broadcast/image-store/app.py#L111)), bloqueando ejecuciones no autorizadas con una respuesta HTTP `401 Unauthorized`.
+
+## 2. Inyección Transparente de Credenciales MQTT
+* **Cero Contraseñas en URL / Git:** Al iniciar sesión como operador, Flask lee las credenciales del broker MQTT del entorno e inyecta dinámicamente el objeto `window.CONFIG` en la plantilla `control.html`.
+* **Cliente JS ([main.js](file:///home/marti/Documentos/Personal/Sonda/docker-broadcast/image-store/static/js/main.js)):** Actualizado para consumir prioritariamente `window.CONFIG.mqttUser` y `window.CONFIG.mqttPass`. El usuario ya no necesita escribir la contraseña en la barra de direcciones del navegador para operar la sonda.

@@ -17,8 +17,8 @@ const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 // Si accedemos por HTTP (IP local), conectamos directo al puerto 9001.
 const mqttUrl = protocol === 'wss:' ? `wss://${serverIP}/mqtt` : `ws://${serverIP}:9001`;
 
-const mqttUser = urlParams.get('mqtt_user') || '';
-const mqttPass = urlParams.get('mqtt_pass') || '';
+const mqttUser = (window.CONFIG && window.CONFIG.mqttUser) || urlParams.get('mqtt_user') || '';
+const mqttPass = (window.CONFIG && window.CONFIG.mqttPass) || urlParams.get('mqtt_pass') || '';
 
 logMessage('info', 'MQTT', 'Conectando a ' + mqttUrl + '...');
 client = mqtt.connect(mqttUrl, {

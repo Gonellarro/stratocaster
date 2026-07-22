@@ -20,6 +20,11 @@ const mqttUrl = protocol === 'wss:' ? `wss://${serverIP}/mqtt` : `ws://${serverI
 const mqttUser = (window.CONFIG && window.CONFIG.mqttUser) || urlParams.get('mqtt_user') || '';
 const mqttPass = (window.CONFIG && window.CONFIG.mqttPass) || urlParams.get('mqtt_pass') || '';
 
+// Inicializar checklist en estado estrictamente rojo (Sin Verificar) al cargar
+if (typeof resetChecklistUI === 'function') {
+    resetChecklistUI();
+}
+
 logMessage('info', 'MQTT', 'Conectando a ' + mqttUrl + '...');
 client = mqtt.connect(mqttUrl, {
     username: mqttUser,

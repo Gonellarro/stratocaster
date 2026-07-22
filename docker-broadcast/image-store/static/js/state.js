@@ -7,13 +7,13 @@ let isTesting = false;
 let currentPhase = 1;
 let mapCentered = false;
 
-// Checklist local status variables
+// Checklist local status variables (Todas en false hasta ejecutar comprobación explícita)
 let checks = {
     movil: false,
     lora_telemetria: false,
-    lora_meshtastic: true,
+    lora_meshtastic: false,
     camera_foto: false,
-    camera_video: true,
+    camera_video: false,
     battery: false,
     sensors: false,
     gps: false,

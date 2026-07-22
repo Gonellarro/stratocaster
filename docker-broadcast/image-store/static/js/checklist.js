@@ -193,16 +193,20 @@ function resetChecklistUI() {
     const ids = ['chk-movil', 'chk-lora', 'chk-meshtastic', 'chk-gps', 'chk-battery', 'chk-sensors', 'chk-audio', 'chk-foto'];
     ids.forEach(id => {
         const item = document.getElementById(id);
-        if (item) item.className = 'checklist-item';
+        if (item) item.className = 'checklist-item ko';
         const val = document.getElementById(id + '-val');
-        if (val) val.textContent = 'Pendiente';
+        if (val) val.textContent = 'Sin Verificar';
     });
     
-    // Meshtastic en verde como omitido por defecto
+    checks.movil = false;
     checks.lora_telemetria = false;
-    checks.lora_meshtastic = true;
-    updateChecklistUI('chk-lora', false, 'Sin Enlace');
-    updateChecklistUI('chk-meshtastic', 'ok', 'Omitido');
+    checks.lora_meshtastic = false;
+    checks.camera_foto = false;
+    checks.camera_video = false;
+    checks.battery = false;
+    checks.sensors = false;
+    checks.gps = false;
+    checks.audio = false;
 }
 
 // Vigilante de Enlaces (Heartbeat Watchdog)

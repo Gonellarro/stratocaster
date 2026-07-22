@@ -25,36 +25,13 @@ function handleSondaDiagnostics(data) {
     document.getElementById('mini-temp').textContent = data.temp + '°C';
     document.getElementById('mini-gps').textContent = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null") ? 'Acc: ' + data.accuracy + 'm' : 'Fijo (Sin Prec.)';
 
+    // Solo actualizar UI de valores en directo (no el estado de verificación del checklist)
     if (data.alt !== null && data.alt !== 'null') {
         document.getElementById('mini-alt').textContent = parseFloat(data.alt).toFixed(1) + ' m';
     }
 
     // Actualizar Coordenadas en Mapa
     updateMapCoordinates('movil', data.lat, data.lng);
-
-    // Actualizar Checklist
-    checks.sensors = true;
-    updateChecklistUI('chk-sensors', true, data.temp + '°C (OK)');
-    
-    if (data.level >= 50) {
-        checks.battery = true;
-        updateChecklistUI('chk-battery', true, data.level + '% (Apto)');
-    } else {
-        checks.battery = false;
-        updateChecklistUI('chk-battery', false, data.level + '% (Batería Baja!)');
-    }
-
-    // Validación de GPS
-    const hasAcc = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null");
-    if (data.lat !== undefined && data.lat !== null && data.lat !== 'null' && data.lat !== 0) {
-        checks.gps = true;
-        const accText = hasAcc ? ' (' + data.accuracy + 'm)' : '';
-        updateChecklistUI('chk-gps', 'ok', 'Fijo' + accText);
-    } else if (!checks.gps) {
-        updateChecklistUI('chk-gps', 'ko', 'Sin Enlace');
-    }
-
-    validateChecklist();
 }
 
 function handleMobileTelemetry(data) {
@@ -69,15 +46,6 @@ function handleMobileTelemetry(data) {
     
     // Mapa
     updateMapCoordinates('movil', data.lat, data.lng);
-    
-    // Validación de GPS
-    const hasAcc = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null");
-    if (data.lat !== undefined && data.lat !== null && data.lat !== 'null' && data.lat !== 0) {
-        checks.gps = true;
-        const accText = hasAcc ? ' (' + data.accuracy + 'm)' : '';
-        updateChecklistUI('chk-gps', true, 'Fijo' + accText);
-    }
-    validateChecklist();
 }
 
 function handleLoraTelemetry(data) {

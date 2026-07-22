@@ -25,13 +25,38 @@ function handleSondaDiagnostics(data) {
     document.getElementById('mini-temp').textContent = data.temp + '°C';
     document.getElementById('mini-gps').textContent = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null") ? 'Acc: ' + data.accuracy + 'm' : 'Fijo (Sin Prec.)';
 
-    // Solo actualizar UI de valores en directo (no el estado de verificación del checklist)
+    // Actualizar datos de telemetría en tiempo real
     if (data.alt !== null && data.alt !== 'null') {
         document.getElementById('mini-alt').textContent = parseFloat(data.alt).toFixed(1) + ' m';
     }
 
     // Actualizar Coordenadas en Mapa
     updateMapCoordinates('movil', data.lat, data.lng);
+
+    // Cuando recibimos la respuesta explícita a 'get_status', marcamos los checks validados
+    checks.movil = true;
+    updateChecklistUI('chk-movil', 'ok', 'CONFIRMADO');
+
+    checks.sensors = true;
+    updateChecklistUI('chk-sensors', 'ok', data.temp + '°C (OK)');
+
+    if (data.level >= 50) {
+        checks.battery = true;
+        updateChecklistUI('chk-battery', 'ok', data.level + '% (Apto)');
+    } else {
+        checks.battery = false;
+        updateChecklistUI('chk-battery', 'ko', data.level + '% (Baja)');
+    }
+
+    // Validación de GPS
+    if (data.lat !== undefined && data.lat !== null && data.lat !== 'null' && data.lat !== 0) {
+        checks.gps = true;
+        const hasAcc = (data.accuracy !== undefined && data.accuracy !== null && data.accuracy !== "null");
+        const accText = hasAcc ? ' (' + data.accuracy + 'm)' : '';
+        updateChecklistUI('chk-gps', 'ok', 'Fijo' + accText);
+    }
+
+    validateChecklist();
 }
 
 function handleMobileTelemetry(data) {

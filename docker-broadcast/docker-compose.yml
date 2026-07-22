@@ -17,6 +17,15 @@ services:
     restart: unless-stopped
     ports:
       - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      - CONTROL_USER=${CONTROL_USER:-admin}
+      - CONTROL_PASS=${CONTROL_PASS:-admin}
+      - TELEGRAF_MQTT_USER=${TELEGRAF_MQTT_USER:-admin}
+      - TELEGRAF_MQTT_PASSWORD=${TELEGRAF_MQTT_PASSWORD:-admin}
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-stratocaster_secret_key}
     volumes:
       - ./image-store:/app
       - ./images:/app/images
+

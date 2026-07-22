@@ -17,6 +17,7 @@ docker-TIG/mosquitto/certs/*.srl
 # Archivos con credenciales y contraseñas (Secretos)
 .env
 docker-TIG/.env
+docker-broadcast/.env
 codigo/Android/sonda.env
 codigo/RXLora/secrets.h
 docker-TIG/mosquitto/config/password_file

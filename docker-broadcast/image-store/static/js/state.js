@@ -6,6 +6,7 @@ let streamActive = false;
 let isTesting = false;
 let currentPhase = 1;
 let mapCentered = false;
+let checklistPassed = false;
 
 // Checklist local status variables (Todas en false hasta ejecutar comprobación explícita)
 let checks = {

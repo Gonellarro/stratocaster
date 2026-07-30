@@ -1,6 +1,8 @@
 // Gestión de Acciones de Lanzamiento y Secuencias REST
 function readyLaunch() {
     logMessage('warn', 'MISIÓN', 'Preparando despegue: Armando la sonda e iniciando señal de vídeo...');
+    mission.state = 'armando';
+    validateChecklist();
     
     // Enviar arm al móvil por MQTT para iniciar Fase 1
     sendCommand('arm');
@@ -15,6 +17,8 @@ function readyLaunch() {
 
 function startCountdown() {
     logMessage('warn', 'MISIÓN', 'Iniciando la cuenta atrás para el lanzamiento en el HUD...');
+    mission.state = 'cuenta_atras';
+    validateChecklist();
     
     // Avisar a Flask para arrancar el segundero de la cuenta atrás
     fetch('/control_lanzamiento', {
@@ -26,6 +30,8 @@ function startCountdown() {
 
 function abortLaunch() {
     logMessage('err', 'MISIÓN', '¡ALERTA! Secuencia de lanzamiento abortada por el operador.');
+    mission.state = 'espera';
+    checklistPassed = false;
     
     // Detener vídeo en móvil y resetear script
     sendCommand('abort');
@@ -58,6 +64,8 @@ function triggerBuzzer() {
 
 function finalizeMission() {
     logMessage('info', 'MISIÓN', 'Finalizando misión. Sonda en fase de aterrizaje y recuperación.');
+    mission.state = 'recuperacion';
+    validateChecklist();
     fetch('/control_lanzamiento', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -69,6 +77,8 @@ function startNewMission() {
     const pass = prompt("Introduce la contraseña de misión:");
     if (pass === 'admin') {
         logMessage('ok', 'SISTEMA', 'Iniciando una nueva sesión de misión.');
+        checklistPassed = false;
+        mission.state = 'espera';
         fetch('/control_lanzamiento', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -88,20 +98,20 @@ function validateChecklist() {
     
     if (!btnReady || !btnArm || !btnAbort) return;
 
-    // Checklist de despegue requiere obligatoriamente los checks del móvil y sus sensores completados:
-    const isReady = checks.movil && checks.gps && checks.battery && checks.sensors && checks.audio && checks.camera_foto;
+    // Si la verificación completa tuvo éxito o todos los checks están OK:
+    const isReady = checklistPassed || (checks.movil && checks.gps && checks.battery && checks.sensors && checks.audio && checks.camera_foto);
+    if (isReady) {
+        checklistPassed = true;
+    }
     
-    // El botón de abortar siempre debe estar disponible si hay una misión en curso,
-    // permitiendo abortar de emergencia incluso si se pierden las conexiones (isReady = false).
+    // Botón Abortar siempre activo durante misiones en curso
     if (mission.state === 'armando' || mission.state === 'cuenta_atras' || mission.state === 'lanzado') {
         btnAbort.disabled = false;
     } else {
         btnAbort.disabled = true;
     }
 
-    // SI LA MISIÓN YA HA INICIADO (estado diferente de 'espera'):
-    // Congelamos el estado de los controles. No evaluamos el checklist para no deshabilitar
-    // los botones si la sonda pierde temporalmente cobertura (al apagar WiFi / cambiar a 4G).
+    // SI LA MISIÓN NO ESTÁ EN ESPERA: congelamos estado del botón "Listo"
     if (mission.state !== 'espera') {
         btnReady.disabled = true;
         if (mission.state === 'armando') {
@@ -109,9 +119,10 @@ function validateChecklist() {
         } else {
             btnArm.disabled = true;
         }
-        return; // Salir sin evaluar isReady
+        return;
     }
 
+    // EN ESPERA:
     if (!isReady) {
         btnReady.disabled = true;
         btnArm.disabled = true;

@@ -87,6 +87,7 @@ function runSelfTest() {
 function executeCurrentStep() {
     if (currentStepIndex >= testSteps.length) {
         isSequenceRunning = false;
+        checklistPassed = true;
         const btn = document.getElementById('btn-test-systems');
         if (btn) {
             btn.textContent = '🤖 SISTEMAS COMPROBADOS';
@@ -198,6 +199,7 @@ function resetChecklistUI() {
         if (val) val.textContent = 'Sin Verificar';
     });
     
+    checklistPassed = false;
     checks.movil = false;
     checks.lora_telemetria = false;
     checks.lora_meshtastic = false;

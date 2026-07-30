@@ -91,64 +91,94 @@ def logout():
 # ENDPOINTS DE CONTROL DE LANZAMIENTO (API REST)
 # ------------------------------------------------------------------------------
 
+STATE_FILE = '/tmp/launch_state.json'
+
+def load_launch_state():
+    default_state = {
+        'estado': 'espera',
+        'tiempo_restante': 0,
+        'timestamp_inicio': 0.0,
+        'timestamp_mision': 0.0
+    }
+    if not os.path.exists(STATE_FILE):
+        return default_state
+    try:
+        with open(STATE_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return default_state
+
+def save_launch_state(state):
+    try:
+        with open(STATE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        app.logger.error(f"Error saving launch state: {e}")
+
 def update_countdown_state():
     """Calcula dinámicamente el tiempo restante de la cuenta atrás."""
-    global LAUNCH_STATE
-    if LAUNCH_STATE['estado'] == 'cuenta_atras':
-        elapsed = time.time() - LAUNCH_STATE['timestamp_inicio']
+    state = load_launch_state()
+    if state.get('estado') == 'cuenta_atras':
+        elapsed = time.time() - state.get('timestamp_inicio', 0.0)
         remaining = 10 - int(elapsed)
         if remaining <= 0:
-            LAUNCH_STATE['estado'] = 'lanzado'
-            LAUNCH_STATE['tiempo_restante'] = 0
+            state['estado'] = 'lanzado'
+            state['tiempo_restante'] = 0
+            save_launch_state(state)
         else:
-            LAUNCH_STATE['tiempo_restante'] = remaining
+            if state.get('tiempo_restante') != remaining:
+                state['tiempo_restante'] = remaining
+                save_launch_state(state)
+    return state
 
 @app.route('/control_lanzamiento', methods=['GET'])
 def get_launch_status():
-    update_countdown_state()
-    return jsonify(LAUNCH_STATE)
+    state = update_countdown_state()
+    return jsonify(state)
 
 @app.route('/control_lanzamiento', methods=['POST'])
 @api_auth_required
 def change_launch_status():
-    global LAUNCH_STATE
+    state = load_launch_state()
     data = request.json or {}
     action = data.get('action')
     
     if action == 'armar':
-        LAUNCH_STATE['estado'] = 'armando'
-        LAUNCH_STATE['tiempo_restante'] = 0
-        LAUNCH_STATE['timestamp_inicio'] = 0.0
-        LAUNCH_STATE['timestamp_mision'] = 0.0
+        state['estado'] = 'armando'
+        state['tiempo_restante'] = 0
+        state['timestamp_inicio'] = 0.0
+        state['timestamp_mision'] = 0.0
     elif action == 'ok':
         now = time.time()
-        LAUNCH_STATE['estado'] = 'cuenta_atras'
-        LAUNCH_STATE['timestamp_inicio'] = now
-        LAUNCH_STATE['timestamp_mision'] = now
-        LAUNCH_STATE['tiempo_restante'] = 10
+        state['estado'] = 'cuenta_atras'
+        state['timestamp_inicio'] = now
+        state['timestamp_mision'] = now
+        state['tiempo_restante'] = 10
     elif action == 'abortar' or action == 'reset':
-        LAUNCH_STATE['estado'] = 'espera'
-        LAUNCH_STATE['tiempo_restante'] = 0
-        LAUNCH_STATE['timestamp_inicio'] = 0.0
-        LAUNCH_STATE['timestamp_mision'] = 0.0
+        state['estado'] = 'espera'
+        state['tiempo_restante'] = 0
+        state['timestamp_inicio'] = 0.0
+        state['timestamp_mision'] = 0.0
     elif action == 'finalizar':
-        LAUNCH_STATE['estado'] = 'recuperacion'
-        LAUNCH_STATE['tiempo_restante'] = 0
-        LAUNCH_STATE['timestamp_inicio'] = 0.0
+        state['estado'] = 'recuperacion'
+        state['tiempo_restante'] = 0
+        state['timestamp_inicio'] = 0.0
         
-    return jsonify(LAUNCH_STATE)
+    save_launch_state(state)
+    return jsonify(state)
 
 @app.route('/control_lanzamiento/ok', methods=['POST'])
 def sonda_confirm_ok():
-    """Endpoint directo para que el móvil de la sonda confirme que está listo para el lanzamiento.
-    Solo transiciona a 'cuenta_atras' si el estado actual es 'armando', evitando
-    que llamadas repetidas del móvil reinicien la cuenta atrás en bucle."""
-    global LAUNCH_STATE
-    if LAUNCH_STATE['estado'] != 'armando':
-        return jsonify({'status': 'ignored', 'message': f"Estado actual es '{LAUNCH_STATE['estado']}', no 'armando'."}), 200
-    LAUNCH_STATE['estado'] = 'cuenta_atras'
-    LAUNCH_STATE['timestamp_inicio'] = time.time()
-    LAUNCH_STATE['tiempo_restante'] = 10
+    """Endpoint directo para que el móvil de la sonda confirme que está listo para el lanzamiento."""
+    state = load_launch_state()
+    if state.get('estado') != 'armando':
+        return jsonify({'status': 'ignored', 'message': f"Estado actual es '{state.get('estado')}', no 'armando'."}), 200
+    now = time.time()
+    state['estado'] = 'cuenta_atras'
+    state['timestamp_inicio'] = now
+    state['timestamp_mision'] = now
+    state['tiempo_restante'] = 10
+    save_launch_state(state)
     return jsonify({'status': 'ok', 'message': 'Countdown started'})
 
 # ------------------------------------------------------------------------------

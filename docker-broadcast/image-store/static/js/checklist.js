@@ -215,14 +215,13 @@ function resetChecklistUI() {
 setInterval(() => {
     const now = Date.now();
     
-    // El timeout del teléfono debe ser más tolerante durante el lanzamiento/vuelo (35s)
-    // que en rampa (20s) para soportar la transición de red (Wi-Fi a 4G) y el arranque del vídeo.
-    const mobileTimeout = (mission.state !== 'espera') ? 35000 : 20000;
+    // Timeout tolerante para la Sonda Móvil (45s en rampa / 60s en vuelo)
+    const mobileTimeout = (mission.state !== 'espera') ? 60000 : 45000;
     
     if (now - lastSondaPing > mobileTimeout) {
+        updateLinkState('movil', false);
         if (checks.movil) {
             checks.movil = false;
-            updateLinkState('movil', false);
             logMessage('err', 'CONEXIÓN', 'Pérdida de cobertura de la Sonda Móvil.');
         }
     } else if (lastSondaPing > 0) {

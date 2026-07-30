@@ -322,4 +322,5 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
 ## 3. Estabilización de Botones de Control y Marcadores en Mapa
 * **Estabilización de `isReady` (`state.js`, `checklist.js`, `launch.js`):** Introducido el flag `checklistPassed` para congelar la validación exitosa del autotest y evitar que oscilaciones en pings MQTT deshabiliten erráticamente los botones de lanzamiento.
 * **Suscripción Dual y Fallback de Posición (`main.js`, `telemetry.js`, `map.js`):** Añadida suscripción dual a `sonda/lora/+/telemetry` y `gps/data`. Ajustado el renderizado en `map.js` para que los marcadores se añadan dinámicamente solo al recibir coordenadas válidas, y posicione el punto cian del Móvil en la ubicación GPS de la sonda si el teléfono está conectado pero en interiores (sin fix propio).
+* **Heartbeat de Estado Periódico (`main.js`, `checklist.js`):** Añadido un ping automático de estado `get_status` cada 15 segundos durante la rampa para mantener actualizado el sello de tiempo (`Último Ping`) y preservar la placa de enlace `Sonda Móvil (4G)` en estado `CONECTADO` sin desconexiones falsas.
 

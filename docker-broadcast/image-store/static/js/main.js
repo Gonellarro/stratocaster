@@ -48,6 +48,13 @@ client.on('connect', () => {
     sendCommand('get_status');
 });
 
+// Polling de estado periódico al móvil durante pre-despegue (cada 15s)
+setInterval(() => {
+    if (client && client.connected && (typeof mission === 'undefined' || mission.state === 'espera')) {
+        sendCommand('get_status');
+    }
+}, 15000);
+
 client.on('message', (topic, message) => {
     let payload;
     try {

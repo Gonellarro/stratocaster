@@ -35,8 +35,10 @@
 #define LORA_RST        14
 #define LORA_DIO0       26
 
+// Frecuencia en la que transmitimos
 #define LORA_FREQUENCY  868E6
-#define TX_INTERVAL     10000UL
+// Frecuencia en que transmitimos (100s)
+#define TX_INTERVAL     100000UL
 
 // Tiempos máximos tolerables de inactividad por canal
 #define NMEA_TIMEOUT_MS        6000UL   // 6s sin recibir cadenas de texto de la UART (fallo real de comunicación)

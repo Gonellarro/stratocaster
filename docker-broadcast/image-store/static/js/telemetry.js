@@ -140,6 +140,10 @@ function handleCameraEvent(data) {
     }
     logMessage('ok', 'CÁMARA', 'Nueva foto procesada por IA: "' + data.texto + '"');
     
+    if (data.lat !== undefined && data.lat !== null && data.lat !== 'null' && data.lat !== 0) {
+        updateMapCoordinates('movil', data.lat, data.lng);
+    }
+    
     if (isSequenceRunning) {
         checks.camera_foto = true;
         updateChecklistUI('chk-foto', true, 'Foto & IA Confirmada');

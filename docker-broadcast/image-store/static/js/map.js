@@ -16,11 +16,17 @@ let baseLayers = {
 };
 L.control.layers(baseLayers).addTo(map);
 
-// Marcadores neón y rutas
+// Marcadores neón y rutas (se añaden dinámicamente al recibir coordenadas válidas)
 let markers = {
-    movil: L.circleMarker([41.12345, 1.98765], { color: '#06b6d4', fillColor: '#06b6d4', fillOpacity: 0.8, radius: 8 }).addTo(map),
-    lora: L.circleMarker([41.12345, 1.98765], { color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.8, radius: 8 }).addTo(map),
-    mesh: L.circleMarker([41.12345, 1.98765], { color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.8, radius: 8 }).addTo(map)
+    movil: L.circleMarker([0, 0], { color: '#06b6d4', fillColor: '#06b6d4', fillOpacity: 0.8, radius: 8 }),
+    lora: L.circleMarker([0, 0], { color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.8, radius: 8 }),
+    mesh: L.circleMarker([0, 0], { color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.8, radius: 8 })
+};
+
+let markerAdded = {
+    movil: false,
+    lora: false,
+    mesh: false
 };
 
 let paths = {
@@ -31,11 +37,19 @@ let paths = {
 
 // Función para actualizar posición y trazar rutas
 function updateMapCoordinates(type, lat, lng) {
-    if (lat === null || lat === undefined || lat === 0 || lat === 'null') return;
+    if (lat === null || lat === undefined || lat === 0 || lat === 'null' || isNaN(parseFloat(lat)) || isNaN(parseFloat(lng))) return;
     
-    const latlng = [parseFloat(lat), parseFloat(lng)];
+    const latnum = parseFloat(lat);
+    const lngnum = parseFloat(lng);
+    if (latnum === 0 && lngnum === 0) return;
+    
+    const latlng = [latnum, lngnum];
     if (markers[type]) {
         markers[type].setLatLng(latlng);
+        if (!markerAdded[type]) {
+            markers[type].addTo(map);
+            markerAdded[type] = true;
+        }
     }
     if (paths[type]) {
         paths[type].addLatLng(latlng);

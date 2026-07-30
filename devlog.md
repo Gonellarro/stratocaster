@@ -301,5 +301,25 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
 * **Preservación de Telemetría:** Se mantuvo el volcado ininterrumpido de coordenadas GPS, altitud y precisión a los paneles de datos en tiempo real y mapa independientemente del estado de la prueba.
 
 ## 2. Bloqueo de Bucle de Estados de Lanzamiento (`app.py`)
-* **Guardia de Estado en `/control_lanzamiento/ok`:** Se añadió una validación en la API de Flask para que únicamente procese transiciones a `cuenta_atras` cuando el estado de la misión sea estrictamente `armando`.
+* **Guardia de Estado en `/control_lanzamiento/ok`:** Se añadió una validación en la API de Flask para que únicamente procese transiciones a `cuenta_atras` cuando el estado de la misión sea strictly `armando`.
 * **Motivo:** Prevenir que llamadas recurrentes o retardadas por parte de la Sonda Móvil tras el despegue provocaran un reinicio continuo de la cuenta atrás y un bucle infinito entre los estados `cuenta_atras` y `lanzado`.
+
+---
+
+<a name="sesion-2026-07-30"></a>
+**Fecha:** 2026-07-30  
+**Sesión:** Integración Completa de Telemetría LoRa/TIG, Persistencia del Estado de Lanzamiento y Estabilización de la Consola de Control.
+
+## 1. Integración de Telemetría LoRa en el TIG Stack y Grafana
+* **Estandarización de Topics LoRa:** Corregido el topic publicado por `RXLora.ino` a `sonda/lora/rx_sonda/telemetry` para alinearlo con las reglas de ingestión de Telegraf (`inputs.mqtt_consumer`).
+* **Verificación de Dashboard Grafana:** Confirmada la compatibilidad de las consultas Flux en `Sonda LORA-1785402646519.json` para filtrar por `subsystem == "lora"` y visualizar latitud, longitud, altitud, velocidad y rumbo.
+
+## 2. Solución al Salto Aleatorio de Fases en Gunicorn/Flask (`docker-broadcast`)
+* **Persistencia en Disco (`/tmp/launch_state.json`):** Migrada la gestión de estado de la memoria global de Python a un archivo JSON en disco en `app.py`.
+* **Ajuste de Workers Gunicorn (`Dockerfile`):** Cambiado el comando de ejecución a `-w 1 --threads 4` para evitar estados fragmentados e incoherentes entre workers paralelos.
+* **Sincronización Inmediata en Frontend (`launch.js`):** Actualización síncrona de `mission.state` al hacer clic en los botones de acción (`readyLaunch`, `startCountdown`, `abortLaunch`, `finalizeMission`).
+
+## 3. Estabilización de Botones de Control y Marcadores en Mapa
+* **Estabilización de `isReady` (`state.js`, `checklist.js`, `launch.js`):** Introducido el flag `checklistPassed` para congelar la validación exitosa del autotest y evitar que oscilaciones en pings MQTT deshabiliten erráticamente los botones de lanzamiento.
+* **Suscripción Dual y Fallback de Posición (`main.js`, `telemetry.js`, `map.js`):** Añadida suscripción dual a `sonda/lora/+/telemetry` y `gps/data`. Ajustado el renderizado en `map.js` para que los marcadores se añadan dinámicamente solo al recibir coordenadas válidas, y posicione el punto cian del Móvil en la ubicación GPS de la sonda si el teléfono está conectado pero en interiores (sin fix propio).
+

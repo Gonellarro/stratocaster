@@ -42,6 +42,7 @@ client.on('connect', () => {
     // Suscripciones de telemetría de radio generales (LoRa y Mesh)
     client.subscribe('sonda/lora/+/telemetry');
     client.subscribe('sonda/mesh/+/telemetry');
+    client.subscribe('gps/data');
     
     // Solicitar primer reporte de estado
     sendCommand('get_status');
@@ -82,8 +83,8 @@ client.on('message', (topic, message) => {
         updateLinkState('movil', true);
         handleCameraEvent(payload);
     }
-    // 2. Mensajes de receptor LoRa (cualquiera bajo la estructura de subtopic)
-    else if (topicParts[0] === 'sonda' && topicParts[1] === 'lora' && topicParts[3] === 'telemetry') {
+    // 2. Mensajes de receptor LoRa (estructura estandarizada sonda/lora/+/telemetry o legacy gps/data)
+    else if ((topicParts[0] === 'sonda' && topicParts[1] === 'lora' && topicParts[3] === 'telemetry') || topic === 'gps/data') {
         lastLoraPing = Date.now();
         checks.lora_telemetria = true;
         updateLinkState('lora', true);

@@ -78,7 +78,26 @@ function handleMobileTelemetry(data) {
 }
 
 function handleLoraTelemetry(data) {
-    // 1. Actualizar referencias LoRa
+    // 1. Actualizar estado de enlace y checklist de LoRa
+    checks.lora_telemetria = true;
+    updateLinkState('lora', true);
+    updateChecklistUI('chk-lora', 'ok', 'Enlace OK (868MHz)');
+
+    if (data.rssi !== undefined && data.rssi !== null) {
+        const signalEl = document.getElementById('sys-lora-signal');
+        if (signalEl) signalEl.textContent = data.rssi + ' dBm';
+    }
+
+    // 2. Si recibimos coordenadas GPS válidas por LoRa, marcar también el GPS como disponible
+    if (data.lat !== null && data.lat !== undefined && data.lat !== 'null' && data.lat !== 0) {
+        checks.gps = true;
+        const gpsVal = document.getElementById('chk-gps-val');
+        if (gpsVal && (gpsVal.textContent === 'Sin Enlace' || gpsVal.textContent === 'Sin Verificar')) {
+            updateChecklistUI('chk-gps', 'ok', 'Fijo LoRa');
+        }
+    }
+
+    // 3. Actualizar referencias LoRa
     if (document.getElementById('td-l-sats')) document.getElementById('td-l-sats').textContent = 'Fijo';
     if (document.getElementById('td-l-alt')) document.getElementById('td-l-alt').textContent = data.altitude !== null && data.altitude !== undefined ? parseFloat(data.altitude).toFixed(1) + ' m' : '--';
     if (document.getElementById('td-l-lat')) document.getElementById('td-l-lat').textContent = data.lat !== null && data.lat !== undefined ? parseFloat(data.lat).toFixed(5) : '--';
@@ -86,7 +105,7 @@ function handleLoraTelemetry(data) {
     if (document.getElementById('td-l-spd')) document.getElementById('td-l-spd').textContent = data.speed !== undefined && data.speed !== null ? parseFloat(data.speed).toFixed(1) + ' km/h' : '--';
     if (document.getElementById('td-l-crs')) document.getElementById('td-l-crs').textContent = data.course !== undefined && data.course !== null ? data.course + '°' : '--';
     
-    // 2. Volcar SIEMPRE los datos reales de radio LoRa (868MHz) a las tarjetas de Telemetría en Tiempo Real
+    // 4. Volcar SIEMPRE los datos reales de radio LoRa (868MHz) a las tarjetas de Telemetría en Tiempo Real
     if (data.lat !== null && data.lat !== undefined && data.lat !== 'null') {
         document.getElementById('td-m-lat').textContent = parseFloat(data.lat).toFixed(5);
     }
@@ -104,7 +123,7 @@ function handleLoraTelemetry(data) {
         document.getElementById('mini-crs').textContent = getWindDirection(courseNum) + ' (' + courseNum.toFixed(1) + '°)';
     }
 
-    // 3. Pintar ruta y marcador rojo de LoRa en el mapa
+    // 5. Pintar ruta y marcador rojo de LoRa en el mapa
     updateMapCoordinates('lora', data.lat, data.lng);
 }
 

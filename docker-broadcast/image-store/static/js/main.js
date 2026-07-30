@@ -61,6 +61,7 @@ client.on('message', (topic, message) => {
     // 1. Mensajes específicos del móvil que estamos controlando/monitoreando
     if (topic === `sonda/mobile/${targetDeviceID}/status`) {
         lastSondaPing = Date.now();
+        checks.movil = true;
         updateLinkState('movil', true);
         
         if (payload.status === 'diagnostico') {
@@ -71,23 +72,27 @@ client.on('message', (topic, message) => {
     } 
     else if (topic === `sonda/mobile/${targetDeviceID}/telemetry`) {
         lastSondaPing = Date.now();
+        checks.movil = true;
         updateLinkState('movil', true);
         handleMobileTelemetry(payload);
     }
     else if (topic === `sonda/mobile/${targetDeviceID}/camera`) {
         lastSondaPing = Date.now();
+        checks.movil = true;
         updateLinkState('movil', true);
         handleCameraEvent(payload);
     }
     // 2. Mensajes de receptor LoRa (cualquiera bajo la estructura de subtopic)
     else if (topicParts[0] === 'sonda' && topicParts[1] === 'lora' && topicParts[3] === 'telemetry') {
         lastLoraPing = Date.now();
+        checks.lora_telemetria = true;
         updateLinkState('lora', true);
         handleLoraTelemetry(payload);
     }
     // 3. Mensajes de Meshtastic (el ID de nodo se extrae del topic)
     else if (topicParts[0] === 'sonda' && topicParts[1] === 'mesh' && topicParts[3] === 'telemetry') {
         lastMeshPing = Date.now();
+        checks.lora_meshtastic = true;
         updateLinkState('meshtastic', true);
         const nodeId = parseInt(topicParts[2]) || payload.node_id;
         handleMeshtasticEvent(payload, nodeId);

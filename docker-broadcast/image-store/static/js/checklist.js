@@ -223,6 +223,9 @@ setInterval(() => {
             updateLinkState('movil', false);
             logMessage('err', 'CONEXIÓN', 'Pérdida de cobertura de la Sonda Móvil.');
         }
+    } else if (lastSondaPing > 0) {
+        checks.movil = true;
+        updateLinkState('movil', true);
     }
     
     // LoRa Telemetría (timeout de 120s / 2 minutos para soportar cadencias de radio espaciadas)
@@ -232,6 +235,9 @@ setInterval(() => {
             updateLinkState('lora', false);
             logMessage('err', 'CONEXIÓN', 'Receptor LoRa de Telemetría fuera de línea (sin recepción por >2 min).');
         }
+    } else if (lastLoraPing > 0) {
+        checks.lora_telemetria = true;
+        updateLinkState('lora', true);
     }
 
     updateGeneralStatusLarge();

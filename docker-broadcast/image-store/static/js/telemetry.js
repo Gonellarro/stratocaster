@@ -33,9 +33,11 @@ function handleSondaDiagnostics(data) {
     // Actualizar Coordenadas en Mapa
     updateMapCoordinates('movil', data.lat, data.lng);
 
-    // Solo cambiar el estado del checklist si la secuencia de prueba (autotest) está ejecutándose activamente
+    // Registrar comunicación activa con el móvil
+    checks.movil = true;
+
+    // Solo cambiar el estado gráfico del checklist si la secuencia de prueba (autotest) está ejecutándose activamente
     if (isSequenceRunning) {
-        checks.movil = true;
         updateChecklistUI('chk-movil', 'ok', 'CONFIRMADO');
 
         checks.sensors = true;

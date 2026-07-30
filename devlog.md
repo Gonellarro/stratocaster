@@ -288,3 +288,18 @@ Cuando decidas migrar los cambios al servidor principal, el checklist ordenado e
 ## 2. Inyección Transparente de Credenciales MQTT
 * **Cero Contraseñas en URL / Git:** Al iniciar sesión como operador, Flask lee las credenciales del broker MQTT del entorno e inyecta dinámicamente el objeto `window.CONFIG` en la plantilla `control.html`.
 * **Cliente JS ([main.js](file:///home/marti/Documentos/Personal/Sonda/docker-broadcast/image-store/static/js/main.js)):** Actualizado para consumir prioritariamente `window.CONFIG.mqttUser` y `window.CONFIG.mqttPass`. El usuario ya no necesita escribir la contraseña en la barra de direcciones del navegador para operar la sonda.
+
+---
+
+<a name="sesion-2026-07-23"></a>
+**Fecha:** 2026-07-23  
+**Sesión:** Corrección de la reactividad del Autotest en Rampa y Solución al Bucle de Estados de Lanzamiento.
+
+## 1. Protección de la Reactividad del Checklist (`telemetry.js`)
+* **Aislamiento por `isSequenceRunning`:** Se envolvió la actualización del UI del checklist en `handleSondaEvent` y `handleCameraEvent` bajo la condición `if (isSequenceRunning)`.
+* **Motivo:** Evitar que las publicaciones o pings pasivos enviados por la Sonda Móvil en estado de rampa activaran indicadores en verde de forma prematura en la web de control sin que el operador hubiera ejecutado la comprobación del autotest.
+* **Preservación de Telemetría:** Se mantuvo el volcado ininterrumpido de coordenadas GPS, altitud y precisión a los paneles de datos en tiempo real y mapa independientemente del estado de la prueba.
+
+## 2. Bloqueo de Bucle de Estados de Lanzamiento (`app.py`)
+* **Guardia de Estado en `/control_lanzamiento/ok`:** Se añadió una validación en la API de Flask para que únicamente procese transiciones a `cuenta_atras` cuando el estado de la misión sea estrictamente `armando`.
+* **Motivo:** Prevenir que llamadas recurrentes o retardadas por parte de la Sonda Móvil tras el despegue provocaran un reinicio continuo de la cuenta atrás y un bucle infinito entre los estados `cuenta_atras` y `lanzado`.

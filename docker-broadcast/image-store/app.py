@@ -263,6 +263,9 @@ def change_launch_status():
         state['estado'] = 'recuperacion'
         state['tiempo_restante'] = 0
         state['timestamp_inicio'] = 0.0
+        state['timestamp_mision'] = 0.0
+        state['preflight_passed'] = False
+        state['video_confirmed'] = False
         state['last_event'] = 'Misión en recuperación'
     else:
         return reject('Acción desconocida')

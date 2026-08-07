@@ -59,6 +59,14 @@ function updateGeneralStatusLarge() {
     const large = document.getElementById('sys-status-large');
     if (!large) return;
 
+    // La recuperación es un estado operativo cerrado, no una alarma de
+    // comunicaciones aunque el móvil ya no tenga cobertura.
+    if (mission.state === 'recuperacion') {
+        large.textContent = 'RECUPERACIÓN';
+        large.className = 'header-pill waiting';
+        return;
+    }
+
     // Al iniciar no hay todavía ningún enlace que declarar como perdido. La
     // alerta se reserva para una desconexión real tras haber tenido datos.
     if (mission.state === 'espera' && !mobileOnline && lastSondaPing === 0) {

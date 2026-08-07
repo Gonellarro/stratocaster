@@ -122,6 +122,15 @@ function finalizeMission() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'finalizar' })
+    }).then(async response => {
+        if (!response.ok) throw new Error(await response.text());
+        const data = await response.json();
+        mission.state = data.estado || 'recuperacion';
+        logMessage('ok', 'MISIÓN', 'Misión finalizada. Reloj detenido; sonda en recuperación.');
+        validateChecklist();
+    }).catch(error => {
+        logMessage('err', 'MISIÓN', 'No se pudo finalizar la misión: ' + error.message);
+        pollLaunchStatus();
     });
 }
 
@@ -209,6 +218,7 @@ function pollLaunchStatus() {
             
             // Sincronizar Fases visuales
             updatePhaseIndicators(data.estado);
+            updateGeneralStatusLarge();
 
             // Sincronizar Tiempo de Misión (arriba) con el servidor
             if (data.timestamp_mision && data.timestamp_mision > 0) {

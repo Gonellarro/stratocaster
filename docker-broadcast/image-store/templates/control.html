@@ -17,7 +17,7 @@
     <div class="header-state"><span>ESTADO</span><b id="sys-status-large" class="header-pill waiting">ESPERA</b></div>
     <div class="header-metric"><span>MISIÓN</span><b id="mission-id-card">--</b></div>
     <div class="header-metric"><span>TIEMPO</span><b id="mission-time">00:00:00</b></div>
-    <button id="btn-new-mission" class="btn primary" onclick="startNewMission()" hidden>NUEVA MISIÓN</button>
+    <button id="btn-new-mission" class="btn primary" onclick="startNewMission()">NUEVA MISIÓN</button>
     <a class="logout" href="{{ url_for('logout') }}">Salir</a>
   </header>
 
@@ -90,8 +90,8 @@
   <script src="{{ url_for('static', filename='js/map.js', v='20260807-19') }}"></script>
   <script src="{{ url_for('static', filename='js/telemetry.js', v='20260807-19') }}"></script>
   <script src="{{ url_for('static', filename='js/checklist.js', v='20260807-19') }}"></script>
-  <script src="{{ url_for('static', filename='js/launch.js', v='20260807-19') }}"></script>
+  <script src="{{ url_for('static', filename='js/launch.js', v='20260807-20') }}"></script>
   <script src="{{ url_for('static', filename='js/fotos.js', v='20260807-19') }}"></script>
-  <script src="{{ url_for('static', filename='js/main.js', v='20260807-19') }}"></script>
+  <script src="{{ url_for('static', filename='js/main.js', v='20260807-20') }}"></script>
 </body>
 </html>

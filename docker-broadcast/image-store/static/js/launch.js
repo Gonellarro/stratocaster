@@ -123,6 +123,7 @@ function finalizeMission() {
 }
 
 function startNewMission() {
+    if (!window.confirm('¿Crear una nueva misión y reiniciar el estado actual?')) return;
     logMessage('info', 'SISTEMA', 'Creando una nueva sesión de misión...');
     fetch('/control_lanzamiento', {
         method: 'POST',
@@ -162,7 +163,10 @@ function validateChecklist() {
     if (btnPreview) btnPreview.disabled = !(mission.state === 'espera' && preflightPassed && !videoPreviewInProgress && !videoConfirmed);
     if (btnVideoConfirm) btnVideoConfirm.disabled = !(mission.state === 'espera' && preflightPassed && videoPreviewReady && !videoConfirmed);
     if (btnFinalize) btnFinalize.disabled = !(mission.state === 'lanzado' || mission.state === 'recuperacion');
-    if (btnNewMission) btnNewMission.hidden = !(mission.state === 'recuperacion' || mission.state === 'finalizada');
+    if (btnNewMission) {
+        btnNewMission.hidden = false;
+        btnNewMission.disabled = ['armando', 'armada', 'cuenta_atras', 'lanzado'].includes(mission.state);
+    }
 
     if (mission.state === 'armada') {
         // El armado ya está confirmado: ahora se puede iniciar la cuenta atrás.

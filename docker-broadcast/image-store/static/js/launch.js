@@ -204,6 +204,10 @@ function pollLaunchStatus() {
                 lastSondaPing = (Number(data.mobile_last_seen) || 0) * 1000;
                 updateLinkState('movil', mobileOnline);
                 const mobilePayload = data.mobile_last_payload || {};
+                if (mobileOnline && mobilePayload.status === 'status_received') {
+                    checks.movil = true;
+                    updateChecklistUI('chk-movil', 'ok', 'RESPUESTA RECIBIDA');
+                }
                 if (mobileOnline && mobilePayload.status === 'diagnostico') {
                     checks.movil = true;
                     checks.sensors = true;

@@ -34,13 +34,39 @@ function startVideoPreview() {
     sendCommand('test_video_on');
     switchCameraTab('video');
     updateChecklistUI('chk-video', 'testing', 'Esperando imagen en OBS...');
+    streamActive = false;
+    videoPreviewReady = false;
+    videoPreviewInProgress = true;
+    clearTimeout(videoPreviewTimer);
     const confirm = document.getElementById('btn-video-confirm');
-    if (confirm) confirm.disabled = false;
-    logMessage('info', 'VÍDEO', 'Previsualización solicitada. Confirma visualmente la imagen en OBS.');
+    if (confirm) confirm.disabled = true;
+    logMessage('info', 'VÍDEO', 'Previsualización solicitada. Se observará durante 5 segundos.');
+    videoPreviewTimer = setTimeout(() => {
+        if (!streamActive) {
+            videoPreviewInProgress = false;
+            updateChecklistUI('chk-video', 'ko', 'Sin señal de vídeo');
+            logMessage('err', 'VÍDEO', 'No se recibió señal de vídeo durante la previsualización.');
+            return;
+        }
+        videoPreviewReady = true;
+        videoPreviewInProgress = false;
+        if (confirm) confirm.disabled = false;
+        logMessage('ok', 'VÍDEO', 'Previsualización completada. Confirma la imagen en OBS.');
+        announceVideoReady();
+    }, 5000);
+}
+
+function announceVideoReady() {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const announcement = new SpeechSynthesisUtterance('La prueba de vídeo ha terminado. Confirma la imagen en OBS.');
+    announcement.lang = 'es-ES';
+    announcement.rate = 1;
+    window.speechSynthesis.speak(announcement);
 }
 
 function confirmVideo() {
-    if (mission.state !== 'espera' || !preflightPassed) return;
+    if (mission.state !== 'espera' || !preflightPassed || !videoPreviewReady) return;
     videoConfirmed = true;
     checks.camera_video = true;
     updateChecklistUI('chk-video', 'ok', 'Confirmado en OBS');
@@ -56,6 +82,9 @@ function confirmVideo() {
 function abortLaunch() {
     logMessage('err', 'MISIÓN', '¡ALERTA! Secuencia de lanzamiento abortada por el operador.');
     mission.state = 'espera';
+    videoPreviewReady = false;
+    videoPreviewInProgress = false;
+    clearTimeout(videoPreviewTimer);
     checklistPassed = false;
     
     // Reiniciar estados locales
@@ -137,8 +166,8 @@ function validateChecklist() {
     }
 
     // La previsualización y confirmación solo son posibles antes de armar.
-    if (btnPreview) btnPreview.disabled = !(mission.state === 'espera' && preflightPassed);
-    if (btnVideoConfirm) btnVideoConfirm.disabled = !(mission.state === 'espera' && preflightPassed && !videoConfirmed);
+    if (btnPreview) btnPreview.disabled = !(mission.state === 'espera' && preflightPassed && !videoPreviewInProgress && !videoConfirmed);
+    if (btnVideoConfirm) btnVideoConfirm.disabled = !(mission.state === 'espera' && preflightPassed && videoPreviewReady && !videoConfirmed);
 
     if (mission.state === 'armada') {
         // El armado ya está confirmado: ahora se puede iniciar la cuenta atrás.

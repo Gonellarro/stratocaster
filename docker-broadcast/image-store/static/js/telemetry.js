@@ -132,6 +132,7 @@ function handleCameraEvent(data) {
     if (img) {
         img.src = '/images/last?t=' + Date.now(); // forzar refresco
     }
+    switchCameraTab('foto');
     
     const photoTimeEl = document.getElementById('photo-time');
     if (photoTimeEl) {
@@ -202,6 +203,7 @@ function handleSondaEvent(data) {
         logMessage('err', 'AUDIO', 'El móvil no pudo ejecutar la orden de audio.');
     } else if (data.status === 'video_streaming_on') {
         streamActive = true;
+        videoPreviewReady = false;
         const videoLink = document.getElementById('video-link-state');
         if (videoLink) { videoLink.textContent = 'RECIBIENDO'; videoLink.className = 'link-badge connected'; }
         if (isSequenceRunning) {
@@ -217,6 +219,9 @@ function handleSondaEvent(data) {
         logMessage('ok', 'VÍDEO', 'Transmisión de vídeo en directo iniciada.');
     } else if (data.status === 'video_streaming_off') {
         streamActive = false;
+        videoPreviewReady = false;
+        videoPreviewInProgress = false;
+        clearTimeout(videoPreviewTimer);
         const videoLink = document.getElementById('video-link-state');
         if (videoLink) { videoLink.textContent = 'SIN SEÑAL'; videoLink.className = 'link-badge disconnected'; }
         const streamBtn = document.getElementById('btn-stream-switch');

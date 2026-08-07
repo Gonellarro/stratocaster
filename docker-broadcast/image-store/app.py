@@ -4,6 +4,7 @@ import json
 import datetime
 import time
 import tempfile
+import threading
 from functools import wraps
 from flask import Flask, request, send_from_directory, render_template, jsonify, session, redirect, url_for
 from werkzeug.utils import secure_filename
@@ -11,8 +12,10 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 try:
     import paho.mqtt.publish as mqtt_publish
+    import paho.mqtt.client as mqtt_client_lib
 except ImportError:  # El contenedor lo instala; permite importar la app en tests mínimos.
     mqtt_publish = None
+    mqtt_client_lib = None
 
 app = Flask(__name__)
 
@@ -148,6 +151,69 @@ def save_launch_state(state):
         os.replace(tmp_path, STATE_FILE)
     except Exception as e:
         app.logger.error(f"Error saving launch state: {e}")
+
+def handle_mqtt_status(message):
+    """Actualiza la misión desde eventos del móvil, sin depender del navegador."""
+    topic = message.topic
+    expected_topic = f'sonda/mobile/{DEVICE_ID}/status'
+    if topic != expected_topic:
+        return
+    try:
+        payload = json.loads(message.payload.decode('utf-8'))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        app.logger.warning('Estado MQTT no válido recibido en %s', topic)
+        return
+    if payload.get('status') != 'landed':
+        return
+
+    state = load_launch_state()
+    if state.get('estado') not in ('lanzado', 'recuperacion'):
+        app.logger.info('Aterrizaje recibido fuera de una misión lanzada; se ignora')
+        return
+    if state.get('estado') == 'recuperacion':
+        return
+    state['estado'] = 'recuperacion'
+    state['tiempo_restante'] = 0
+    state['last_event'] = 'Aterrizaje detectado; baliza de recuperación activa'
+    save_launch_state(state)
+    app.logger.info('Misión %s pasa a RECUPERACIÓN por evento MQTT landed', state.get('mission_id'))
+
+def start_mqtt_listener():
+    """Arranca un receptor MQTT persistente en segundo plano (un worker Gunicorn)."""
+    if mqtt_client_lib is None or not MQTT_HOST:
+        app.logger.warning('Receptor MQTT interno desactivado: falta paho-mqtt o MQTT_HOST')
+        return
+
+    def run():
+        while True:
+            try:
+                try:
+                    client = mqtt_client_lib.Client(
+                        mqtt_client_lib.CallbackAPIVersion.VERSION2,
+                        client_id=f'control-{DEVICE_ID}',
+                    )
+                except AttributeError:
+                    client = mqtt_client_lib.Client(client_id=f'control-{DEVICE_ID}')
+                if MQTT_VIEW_USER:
+                    client.username_pw_set(MQTT_VIEW_USER, MQTT_VIEW_PASS)
+
+                def on_connect(mqtt_client, userdata, flags, *args):
+                    mqtt_client.subscribe(f'sonda/mobile/{DEVICE_ID}/status', qos=1)
+                    app.logger.info('Receptor MQTT interno conectado y suscrito al estado móvil')
+
+                def on_message(mqtt_client, userdata, message):
+                    handle_mqtt_status(message)
+
+                client.on_connect = on_connect
+                client.on_message = on_message
+                client.reconnect_delay_set(min_delay=2, max_delay=30)
+                client.connect(MQTT_HOST, MQTT_PORT, keepalive=30)
+                client.loop_forever()
+            except Exception as exc:
+                app.logger.warning('Receptor MQTT interno desconectado: %s', exc)
+                time.sleep(5)
+
+    threading.Thread(target=run, name='mqtt-status-listener', daemon=True).start()
 
 def publish_command(command, command_id):
     """Publica una orden de misión; el móvil debe devolver un acuse con el ID."""
@@ -431,6 +497,8 @@ def last_image():
 def control_panel():
     return render_template('control.html', mqtt_user=MQTT_VIEW_USER, mqtt_pass=MQTT_VIEW_PASS,
                            device_id=DEVICE_ID, vdo_view_url=VDO_NINJA_VIEW_URL)
+
+start_mqtt_listener()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

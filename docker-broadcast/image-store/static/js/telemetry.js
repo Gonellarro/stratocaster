@@ -200,20 +200,9 @@ function handleSondaEvent(data) {
             landingTransitionRequested = true;
             logMessage('warn', 'ATERRIZAJE', 'Aterrizaje detectado por la sonda. Activando recuperación.');
         }
-        if (mission.state === 'lanzado') {
-            fetch('/control_lanzamiento', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({action: 'recuperacion'})
-            }).then(async response => {
-                if (!response.ok) throw new Error(await response.text());
-                const state = await response.json();
-                mission.state = state.estado;
-                updatePhaseIndicators(mission.state);
-                updateGeneralStatusLarge();
-                validateChecklist();
-            }).catch(error => logMessage('err', 'ATERRIZAJE', 'No se pudo activar recuperación: ' + error.message));
-        }
+        // Flask es la autoridad del estado. El navegador solo refresca su
+        // representación mediante el polling periódico.
+        pollLaunchStatus();
     } else if (data.status === 'video_streaming_on') {
         streamActive = true;
         videoPreviewReady = false;

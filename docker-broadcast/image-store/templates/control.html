@@ -6,7 +6,7 @@
   <title>Control de misión · Sonda</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/control.css', v='20260807-8') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/control.css', v='20260807-9') }}">
   <script>
     window.CONFIG = { mqttUser: "{{ mqtt_user }}", mqttPass: "{{ mqtt_pass }}", deviceId: "{{ device_id }}" };
   </script>
@@ -14,7 +14,7 @@
 <body>
   <header class="mission-header">
     <div class="brand"><span class="brand-mark">●</span><div><strong>SONDA METEOROLÓGICA</strong><small>CONTROL DE MISIÓN</small></div></div>
-    <div class="header-state"><span>ESTADO</span><b id="sys-status-large" class="header-pill alarm">ALERTA</b></div>
+    <div class="header-state"><span>ESTADO</span><b id="sys-status-large" class="header-pill waiting">ESPERA</b></div>
     <div class="header-metric"><span>MISIÓN</span><b id="mission-id-card">--</b></div>
     <div class="header-metric"><span>TIEMPO</span><b id="mission-time">00:00:00</b></div>
     <a class="logout" href="{{ url_for('logout') }}">Salir</a>
@@ -85,13 +85,13 @@
   <div id="gps-debug-modal" class="modal" style="display:none"><div class="modal-content"><button onclick="closeGpsModal()">Cerrar</button><pre id="gps-modal-raw-json"></pre></div></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="{{ url_for('static', filename='js/state.js', v='20260807-7') }}"></script>
-  <script src="{{ url_for('static', filename='js/ui.js', v='20260807-7') }}"></script>
-  <script src="{{ url_for('static', filename='js/map.js', v='20260807-7') }}"></script>
-  <script src="{{ url_for('static', filename='js/telemetry.js', v='20260807-7') }}"></script>
-  <script src="{{ url_for('static', filename='js/checklist.js', v='20260807-7') }}"></script>
-  <script src="{{ url_for('static', filename='js/launch.js', v='20260807-7') }}"></script>
-  <script src="{{ url_for('static', filename='js/fotos.js', v='20260807-7') }}"></script>
-  <script src="{{ url_for('static', filename='js/main.js', v='20260807-7') }}"></script>
+  <script src="{{ url_for('static', filename='js/state.js', v='20260807-9') }}"></script>
+  <script src="{{ url_for('static', filename='js/ui.js', v='20260807-9') }}"></script>
+  <script src="{{ url_for('static', filename='js/map.js', v='20260807-9') }}"></script>
+  <script src="{{ url_for('static', filename='js/telemetry.js', v='20260807-9') }}"></script>
+  <script src="{{ url_for('static', filename='js/checklist.js', v='20260807-9') }}"></script>
+  <script src="{{ url_for('static', filename='js/launch.js', v='20260807-9') }}"></script>
+  <script src="{{ url_for('static', filename='js/fotos.js', v='20260807-9') }}"></script>
+  <script src="{{ url_for('static', filename='js/main.js', v='20260807-9') }}"></script>
 </body>
 </html>

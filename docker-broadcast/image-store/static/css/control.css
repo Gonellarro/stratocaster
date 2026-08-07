@@ -23,3 +23,4 @@
   .top-grid,.media-grid,.bottom-grid{display:contents}
   .preflight-panel{order:1}.video-panel{order:2}.mission-panel{order:3}.telemetry-panel{order:4}.map-panel{order:5}.links-panel{order:6}.log-panel{order:7}
 }
+.header-pill.waiting{background:#71808c}

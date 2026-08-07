@@ -58,6 +58,14 @@ function updateLinkState(linkId, connected) {
 function updateGeneralStatusLarge() {
     const large = document.getElementById('sys-status-large');
     if (!large) return;
+
+    // Al iniciar no hay todavía ningún enlace que declarar como perdido. La
+    // alerta se reserva para una desconexión real tras haber tenido datos.
+    if (mission.state === 'espera' && !mobileOnline && lastSondaPing === 0) {
+        large.textContent = 'ESPERA';
+        large.className = 'header-pill waiting';
+        return;
+    }
     
     let disconnectedCount = 0;
     if (!mobileOnline) disconnectedCount++;

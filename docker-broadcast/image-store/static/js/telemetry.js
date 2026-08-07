@@ -2,8 +2,6 @@
 function handleSondaDiagnostics(data) {
     // Un diagnóstico completo confirma la disponibilidad del móvil y alimenta
     // también los checks de batería y sensor térmico sin repetir get_status.
-    mobileOnline = true;
-    updateLinkState('movil', true);
     if (isSequenceRunning) {
         checks.movil = true;
         updateChecklistUI('chk-movil', 'ok', 'Respuesta recibida');
@@ -156,8 +154,6 @@ function handleCameraEvent(data) {
 
 function handleSondaEvent(data) {
     if (data.status === 'status_received') {
-        mobileOnline = true;
-        updateLinkState('movil', true);
         if (isSequenceRunning) {
             // status_received solo es un acuse de recepción de la orden. El
             // móvil queda confirmado con el diagnóstico completo.

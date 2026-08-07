@@ -49,7 +49,7 @@ function updateLinkState(linkId, connected) {
         }
     } else {
         if (badge) {
-            badge.textContent = 'Desconectado';
+            badge.textContent = 'Sin comunicación';
             badge.className = 'link-badge disconnected';
         }
     }

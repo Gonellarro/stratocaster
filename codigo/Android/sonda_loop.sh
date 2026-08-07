@@ -478,6 +478,7 @@ LAST_ALTITUDE=""
 LOW_MOTION_CYCLES=0
 LANDING_STABLE_CYCLES=36
 LAST_LANDING_STATUS_AT=0
+LAST_HEARTBEAT_AT=0
 
 while true; do
     if [ -f "$ABORT_FLAG" ]; then
@@ -539,6 +540,13 @@ while true; do
 
     # 2. Gestión dinámica de conectividad en vuelo
     if [ "$COBERTURA" -eq 1 ]; then
+        # Heartbeat explícito: permite al servidor distinguir presencia móvil
+        # de la telemetría y detectar la recuperación de la comunicación.
+        NOW=$(date +%s)
+        if [ $((NOW - LAST_HEARTBEAT_AT)) -ge 15 ]; then
+            publish_mqtt "$TOPIC_STATUS" "$(jq -n --arg device_id "$DEVICE_ID" '{status: "heartbeat", device_id: $device_id, timestamp: now}')"
+            LAST_HEARTBEAT_AT="$NOW"
+        fi
         # Si aterrizó sin cobertura, repetir periódicamente el evento hasta
         # que la consola pueda pasar a recuperación.
         if [ -f "$LANDING_FLAG" ]; then

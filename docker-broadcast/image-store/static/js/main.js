@@ -66,8 +66,6 @@ client.on('message', (topic, message) => {
     // 1. Mensajes específicos del móvil que estamos controlando/monitoreando
     if (topic === `sonda/mobile/${targetDeviceID}/status`) {
         lastSondaPing = Date.now();
-        mobileOnline = true;
-        updateLinkState('movil', true);
         
         if (payload.status === 'diagnostico') {
             handleSondaDiagnostics(payload);
@@ -77,14 +75,10 @@ client.on('message', (topic, message) => {
     } 
     else if (topic === `sonda/mobile/${targetDeviceID}/telemetry`) {
         lastSondaPing = Date.now();
-        mobileOnline = true;
-        updateLinkState('movil', true);
         handleMobileTelemetry(payload);
     }
     else if (topic === `sonda/mobile/${targetDeviceID}/camera`) {
         lastSondaPing = Date.now();
-        mobileOnline = true;
-        updateLinkState('movil', true);
         handleCameraEvent(payload);
     }
     // 2. Mensajes de receptor LoRa (estructura estandarizada sonda/lora/+/telemetry o legacy gps/data)

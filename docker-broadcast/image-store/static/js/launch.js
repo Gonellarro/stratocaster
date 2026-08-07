@@ -193,6 +193,20 @@ function pollLaunchStatus() {
         .then(data => {
             mission.state = data.estado;
             if (data.mission_id) mission.id = data.mission_id;
+            // Flask es la autoridad de presencia móvil. El navegador no
+            // deduce la cobertura por sus propios mensajes MQTT.
+            if (typeof data.mobile_online === 'boolean') {
+                mobileOnline = data.mobile_online;
+                lastSondaPing = (Number(data.mobile_last_seen) || 0) * 1000;
+                updateLinkState('movil', mobileOnline);
+                const coverageState = mobileOnline ? 'online' : 'offline';
+                if (lastCoverageState === 'offline' && coverageState === 'online') {
+                    logMessage('ok', 'COMUNICACIÓN', 'Comunicación móvil recuperada.');
+                } else if (lastCoverageState === 'online' && coverageState === 'offline') {
+                    logMessage('err', 'COMUNICACIÓN', 'Sin comunicación con el móvil. Se conserva la última posición válida.');
+                }
+                lastCoverageState = coverageState;
+            }
             preflightPassed = Boolean(data.preflight_passed || preflightPassed);
             videoConfirmed = Boolean(data.video_confirmed || videoConfirmed);
             checklistPassed = preflightPassed;

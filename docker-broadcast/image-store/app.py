@@ -117,6 +117,7 @@ def logout():
 
 STATE_FILE = os.environ.get('LAUNCH_STATE_FILE', '/data/launch_state.json')
 COUNTDOWN_SECONDS = 10
+MOBILE_HEARTBEAT_TIMEOUT = int(os.environ.get('MOBILE_HEARTBEAT_TIMEOUT', '60'))
 
 DEFAULT_STATE = {
     'mission_id': '',
@@ -128,6 +129,8 @@ DEFAULT_STATE = {
     'video_confirmed': False,
     'last_command_id': '',
     'last_event': 'Sistema en espera',
+    'mobile_last_seen': 0.0,
+    'mobile_last_status': '',
 }
 
 def load_launch_state():
@@ -152,6 +155,17 @@ def save_launch_state(state):
     except Exception as e:
         app.logger.error(f"Error saving launch state: {e}")
 
+def mobile_presence(state):
+    """Calcula la presencia móvil en el servidor a partir del último MQTT recibido."""
+    last_seen = float(state.get('mobile_last_seen') or 0.0)
+    online = last_seen > 0 and (time.time() - last_seen) <= MOBILE_HEARTBEAT_TIMEOUT
+    return {
+        'mobile_online': online,
+        'mobile_last_seen': last_seen,
+        'mobile_last_status': state.get('mobile_last_status', ''),
+        'mobile_timeout': MOBILE_HEARTBEAT_TIMEOUT,
+    }
+
 def handle_mqtt_status(message):
     """Actualiza la misión desde eventos del móvil, sin depender del navegador."""
     topic = message.topic
@@ -163,10 +177,14 @@ def handle_mqtt_status(message):
     except (UnicodeDecodeError, json.JSONDecodeError):
         app.logger.warning('Estado MQTT no válido recibido en %s', topic)
         return
+    state = load_launch_state()
+    state['mobile_last_seen'] = time.time()
+    state['mobile_last_status'] = payload.get('status', '')
+    save_launch_state(state)
+
     if payload.get('status') != 'landed':
         return
 
-    state = load_launch_state()
     if state.get('estado') not in ('lanzado', 'recuperacion'):
         app.logger.info('Aterrizaje recibido fuera de una misión lanzada; se ignora')
         return
@@ -275,7 +293,7 @@ def update_countdown_state():
 @app.route('/control_lanzamiento', methods=['GET'])
 def get_launch_status():
     state = update_countdown_state()
-    return jsonify(state)
+    return jsonify({**state, **mobile_presence(state)})
 
 @app.route('/control_lanzamiento', methods=['POST'])
 @api_auth_required
@@ -308,6 +326,8 @@ def change_launch_status():
     elif action == 'armar':
         if state.get('estado') != 'espera' or not state.get('preflight_passed') or not state.get('video_confirmed'):
             return reject('Faltan pruebas pre-vuelo o confirmación visual del vídeo')
+        if not mobile_presence(state)['mobile_online']:
+            return reject('El móvil no está comunicando con el servidor')
         state['estado'] = 'armando'
         state['tiempo_restante'] = 0
         state['timestamp_inicio'] = 0.0

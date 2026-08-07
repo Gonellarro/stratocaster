@@ -237,34 +237,6 @@ function resetChecklistUI() {
 setInterval(() => {
     const now = Date.now();
     
-    // Timeout tolerante para la Sonda Móvil (45s en rampa / 60s en vuelo)
-    const mobileTimeout = (mission.state !== 'espera') ? 60000 : 45000;
-    
-    if (now - lastSondaPing > mobileTimeout) {
-        mobileOnline = false;
-        updateLinkState('movil', false);
-        if (lastCoverageState !== 'offline') {
-            lastCoverageState = 'offline';
-            logMessage('err', 'COBERTURA', 'Cobertura móvil perdida. Se conserva la última posición válida.');
-        }
-        if (checks.movil) {
-            checks.movil = false;
-            if (preflightPassed && mission.state === 'espera') {
-                preflightPassed = false;
-                checklistPassed = false;
-                logMessage('err', 'PRE-VUELO', 'La prueba del móvil ha caducado; hay que repetirla.');
-                fetch('/control_lanzamiento', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action: 'preflight_reset'})});
-            }
-        }
-    } else if (lastSondaPing > 0) {
-        mobileOnline = true;
-        updateLinkState('movil', true);
-        if (lastCoverageState !== 'online') {
-            if (lastCoverageState === 'offline') logMessage('ok', 'COBERTURA', 'Cobertura móvil recuperada.');
-            lastCoverageState = 'online';
-        }
-    }
-    
     // LoRa Telemetría (timeout de 120s / 2 minutos para soportar cadencias de radio espaciadas)
     if (now - lastLoraPing > 120000) {
         loraOnline = false;

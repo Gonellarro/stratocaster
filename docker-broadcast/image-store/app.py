@@ -382,13 +382,20 @@ def change_launch_status():
     elif action == 'finalizar':
         if state.get('estado') not in ('lanzado', 'recuperacion'):
             return reject('Solo se puede finalizar una misión lanzada o en recuperación')
+        command_id = uuid.uuid4().hex
+        recovery_sent = publish_command('recovery', command_id)
         state['estado'] = 'finalizada'
         state['tiempo_restante'] = 0
         state['timestamp_inicio'] = 0.0
         state['timestamp_mision'] = 0.0
         state['preflight_passed'] = False
         state['video_confirmed'] = False
-        state['last_event'] = 'Misión finalizada'
+        state['last_command_id'] = command_id
+        state['last_event'] = (
+            'Misión finalizada; orden de recuperación enviada al móvil'
+            if recovery_sent else
+            'Misión finalizada; no se pudo enviar la orden de recuperación al móvil'
+        )
     else:
         return reject('Acción desconocida')
 

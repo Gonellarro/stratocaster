@@ -26,6 +26,7 @@ LAUNCH_FLAG="$STATE_DIR/sonda.launch"
 ABORT_FLAG="$STATE_DIR/sonda.abort"
 VIDEO_FLAG="$STATE_DIR/sonda.video"
 LANDING_FLAG="$STATE_DIR/sonda.landed"
+RECOVERY_FLAG="$STATE_DIR/sonda.recovery"
 
 # Único audio operativo por ahora: baliza de recuperación.
 ALARM_AUDIO="${ALARM_AUDIO:-$AUDIO_DIR/alarma.mp3}"
@@ -39,6 +40,7 @@ fi
 TOPIC_STATUS="sonda/mobile/$DEVICE_ID/status"
 TOPIC_TELEMETRY="sonda/mobile/$DEVICE_ID/telemetry"
 TOPIC_CAMERA="sonda/mobile/$DEVICE_ID/camera"
+TOPIC_PROBE="sonda/mobile/$DEVICE_ID/probe"
 TOPIC_COMMAND="sonda/mobile/$DEVICE_ID/command"
 
 
@@ -93,6 +95,42 @@ publish_mqtt() {
     else
         mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$topic" -m "$message" &>/dev/null
     fi
+}
+
+# Comprueba que el broker está disponible y que las credenciales MQTT siguen
+# siendo válidas. El probe no transporta telemetría ni se guarda en Flask.
+mqtt_connection_available() {
+    nc -z -w 2 "$MQTT_HOST" "$MQTT_PORT" &>/dev/null || return 1
+    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" \
+        -u "$MQTT_USER" -P "$MQTT_PASS" \
+        -t "$TOPIC_PROBE" -n -q 0 -W 3 &>/dev/null
+}
+
+enter_recovery_mode() {
+    touch "$LANDING_FLAG" "$RECOVERY_FLAG"
+    stop_video_apps
+    if start_recovery_audio; then
+        publish_mqtt "$TOPIC_STATUS" '{"status":"landed","alarm":"starting","source":"command"}' true
+        publish_ack "recovery_alarm_started"
+    else
+        publish_ack "recovery_alarm_missing_audio"
+    fi
+    echo "[RECUPERACIÓN] Sonda en tierra. Baliza activa."
+
+    local last_recovery_status=0
+    local last_recovery_probe=0
+    while true; do
+        local now
+        now=$(date +%s)
+        if [ $((now - last_recovery_probe)) -ge "$CONNECTIVITY_CHECK_INTERVAL" ]; then
+            if mqtt_connection_available && [ $((now - last_recovery_status)) -ge 60 ]; then
+                publish_mqtt "$TOPIC_STATUS" '{"status":"landed","alarm":"active","source":"recovery"}' true
+                last_recovery_status="$now"
+            fi
+            last_recovery_probe="$now"
+        fi
+        sleep 10
+    done
 }
 
 # Acuse explícito de cada orden para que la consola no confunda un mensaje
@@ -231,6 +269,12 @@ handle_command() {
             stop_recovery_audio
             publish_ack "audio_stopped" "$command_id"
             ;;
+
+        "recovery")
+            echo "[RECUPERACIÓN] Orden recibida: entrando en fase de tierra..."
+            touch "$RECOVERY_FLAG"
+            publish_ack "recovery_requested" "$command_id"
+            ;;
             
         "test_video_on")
             echo "[📹 VIDEO] Test de vídeo: Iniciando streaming..."
@@ -364,6 +408,7 @@ rm -f "$ARMED_FLAG"
 rm -f "$LAUNCH_FLAG"
 rm -f "$VIDEO_FLAG"
 rm -f "$LANDING_FLAG"
+rm -f "$RECOVERY_FLAG"
 
 # Suscriptor MQTT de fondo
 (
@@ -424,6 +469,9 @@ LAST_OFFLINE_TELEMETRY_AT=0
 COBERTURA=0
 
 while true; do
+    if [ -f "$RECOVERY_FLAG" ]; then
+        enter_recovery_mode
+    fi
     # Verificar si el operador ha enviado orden de abortar lanzamiento
     if [ -f "$ABORT_FLAG" ]; then
         echo "[🚨 ABORTAR] Flag de aborto detectado. Limpiando y reiniciando script..."
@@ -452,7 +500,7 @@ while true; do
       '{lat: $lat, lng: $lng, altitude: $alt, accuracy: $acc}')
     NOW=$(date +%s)
     if [ $((NOW - LAST_CONNECTIVITY_CHECK_AT)) -ge "$CONNECTIVITY_CHECK_INTERVAL" ]; then
-        if nc -z -w 2 "$MQTT_HOST" "$MQTT_PORT" &>/dev/null; then
+        if mqtt_connection_available; then
             COBERTURA=1
         else
             COBERTURA=0
@@ -525,6 +573,9 @@ LAST_LANDING_STATUS_AT=0
 LAST_HEARTBEAT_AT=0
 
 while true; do
+    if [ -f "$RECOVERY_FLAG" ]; then
+        enter_recovery_mode
+    fi
     if [ -f "$ABORT_FLAG" ]; then
         rm -f "$ABORT_FLAG" "$LANDING_FLAG"
         stop_recovery_audio
@@ -534,7 +585,7 @@ while true; do
     # 1. Comprobar conectividad periódicamente, no en cada ciclo de GPS.
     NOW=$(date +%s)
     if [ $((NOW - LAST_CONNECTIVITY_CHECK_AT)) -ge "$CONNECTIVITY_CHECK_INTERVAL" ]; then
-        if nc -z -w 2 "$MQTT_HOST" "$MQTT_PORT" &>/dev/null; then
+        if mqtt_connection_available; then
             COBERTURA=1
         else
             COBERTURA=0
@@ -578,6 +629,7 @@ while true; do
     fi
     if [ "$LOW_MOTION_CYCLES" -ge "$LANDING_STABLE_CYCLES" ] && [ ! -f "$LANDING_FLAG" ]; then
         touch "$LANDING_FLAG"
+        touch "$RECOVERY_FLAG"
         publish_mqtt "$TOPIC_STATUS" "$(jq -n --argjson alt "$ALT_NUM" '{status: "landed", alt: $alt, alarm: "starting"}')"
         if start_recovery_audio; then
             publish_ack "recovery_alarm_started"

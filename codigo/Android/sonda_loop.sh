@@ -18,6 +18,7 @@ LANDING_FLAG="$HOME/imagenes/sonda.landed"
 ALARM_AUDIO="$HOME/sonidos/alarma_recuperacion.mp3"
 TTS_LOCK_DIR="$HOME/.sonda_tts_lock"
 TTS_STREAM="${TTS_STREAM:-alarm}"
+TTS_SETTLE_SECONDS="${TTS_SETTLE_SECONDS:-4}"
 
 
 # Cargar variables de entorno y credenciales privadas desde 'sonda.env' si existe
@@ -120,9 +121,17 @@ speak_tts() {
         fi
     done
 
-    printf '%s\n' "$$" > "$TTS_LOCK_DIR/pid"
+    # BASHPID identifica el manejador MQTT concreto; $$ sería el PID del
+    # proceso principal y haría parecer vivo un lock de un proceso terminado.
+    printf '%s\n' "$BASHPID" > "$TTS_LOCK_DIR/pid"
     local result=0
     timeout 12 termux-tts-speak -s "$TTS_STREAM" "$text" || result=$?
+    if [ "$result" -eq 0 ] && [ "$TTS_SETTLE_SECONDS" -gt 0 ]; then
+        # termux-tts-speak confirma la entrega al servicio Android antes de
+        # que el altavoz empiece a sonar; dejamos margen para que no se pise
+        # la siguiente locución.
+        sleep "$TTS_SETTLE_SECONDS"
+    fi
     rm -f "$TTS_LOCK_DIR/pid"
     rmdir "$TTS_LOCK_DIR" 2>/dev/null || true
     return "$result"

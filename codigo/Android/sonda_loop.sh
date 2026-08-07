@@ -362,13 +362,18 @@ rm -f "$LANDING_FLAG"
 
 # Suscriptor MQTT de fondo
 (
-    mosquitto_sub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_COMMAND" 2>/dev/null | while read -r line; do
-        CMD=$(echo "$line" | jq -r '.cmd // empty')
-        COMMAND_ID=$(echo "$line" | jq -r '.command_id // empty')
-        AUDIO_ID=$(echo "$line" | jq -r '.audio_id // empty')
-        if [ -n "$CMD" ]; then
-            handle_command "$CMD" "$COMMAND_ID" "$AUDIO_ID" </dev/null &
-        fi
+    while true; do
+        # mosquitto_sub termina cuando se corta la red; volver a lanzarlo
+        # permite recibir comandos al recuperar la cobertura.
+        mosquitto_sub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_COMMAND" 2>/dev/null | while read -r line; do
+            CMD=$(echo "$line" | jq -r '.cmd // empty')
+            COMMAND_ID=$(echo "$line" | jq -r '.command_id // empty')
+            AUDIO_ID=$(echo "$line" | jq -r '.audio_id // empty')
+            if [ -n "$CMD" ]; then
+                handle_command "$CMD" "$COMMAND_ID" "$AUDIO_ID" </dev/null &
+            fi
+        done
+        sleep 2
     done
 ) &
 SUB_PID=$!
@@ -561,6 +566,7 @@ while true; do
             echo "[🛰️ NET] Conexión recuperada. Reanudando vídeo en directo..."
             am start -a android.intent.action.VIEW -d "$VDO_NINJA_URL" &>/dev/null
             VIDEO_RUNNING=1
+            publish_mqtt "$TOPIC_STATUS" '{"status": "video_streaming_on", "reason": "connection_recovered"}'
             sleep 2
         fi
 
@@ -582,6 +588,8 @@ while true; do
         echo "[🛰️ NET] [$(date +%T)] Telemetría enviada por MQTT."
     else
         # Sin cobertura: Si el directo de Chrome está corriendo, lo matamos para salvar batería
+        # Forzar un heartbeat inmediato en cuanto vuelva la conexión.
+        LAST_HEARTBEAT_AT=0
         if [ "$VIDEO_RUNNING" -eq 1 ]; then
             echo "[🛰️ NET] Conexión perdida. Apagando vídeo para conservar batería..."
             stop_video_apps

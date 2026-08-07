@@ -206,6 +206,9 @@ function pollLaunchStatus() {
                 const coverageState = mobileOnline ? 'online' : 'offline';
                 if (lastCoverageState === 'offline' && coverageState === 'online') {
                     logMessage('ok', 'COMUNICACIÓN', 'Comunicación móvil recuperada.');
+                    if (mission.state === 'lanzado' && typeof reloadVideoViewer === 'function') {
+                        reloadVideoViewer();
+                    }
                 } else if (lastCoverageState === 'online' && coverageState === 'offline') {
                     logMessage('err', 'COMUNICACIÓN', 'Sin comunicación con el móvil. Se conserva la última posición válida.');
                 }

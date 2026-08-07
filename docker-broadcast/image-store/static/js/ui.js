@@ -116,6 +116,17 @@ function switchCameraTab(tabName) {
     }
 }
 
+function reloadVideoViewer() {
+    const streamFrame = document.getElementById('video-stream');
+    if (!streamFrame) return;
+    const vdoUrl = (window.CONFIG && window.CONFIG.vdoViewUrl) || 'https://vdo.ninja/?view=sonda_stratocaster';
+    streamFrame.src = '';
+    window.setTimeout(() => {
+        streamFrame.src = vdoUrl;
+        switchCameraTab('video');
+    }, 500);
+}
+
 function logMessage(level, tag, text) {
     const display = document.getElementById('log-display');
     if (!display) return;

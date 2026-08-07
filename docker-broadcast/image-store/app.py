@@ -215,13 +215,16 @@ def start_mqtt_listener():
 
     threading.Thread(target=run, name='mqtt-status-listener', daemon=True).start()
 
-def publish_command(command, command_id):
+def publish_command(command, command_id, extra=None):
     """Publica una orden de misión; el móvil debe devolver un acuse con el ID."""
     if mqtt_publish is None:
         app.logger.error('paho-mqtt no está instalado; no se puede publicar la orden')
         return False
     try:
-        payload = json.dumps({'cmd': command, 'command_id': command_id, 'expires_at': time.time() + 30})
+        payload_data = {'cmd': command, 'command_id': command_id, 'expires_at': time.time() + 30}
+        if extra:
+            payload_data.update(extra)
+        payload = json.dumps(payload_data)
         mqtt_publish.single(
             f'sonda/mobile/{DEVICE_ID}/command', payload=payload,
             hostname=MQTT_HOST, port=MQTT_PORT,
@@ -392,7 +395,13 @@ def device_command():
     if device_id != DEVICE_ID or command not in allowed:
         return jsonify({'error': 'Comando o dispositivo no permitido'}), 403
     command_id = data.get('command_id') or uuid.uuid4().hex
-    if not publish_command(command, command_id):
+    extra = {}
+    if command == 'play_audio':
+        audio_id = data.get('audio_id')
+        if audio_id != 'recovery_alarm':
+            return jsonify({'error': 'Audio no permitido'}), 403
+        extra['audio_id'] = audio_id
+    if not publish_command(command, command_id, extra):
         return jsonify({'error': 'No se pudo publicar el comando'}), 503
     return jsonify({'status': 'sent', 'command_id': command_id})
 

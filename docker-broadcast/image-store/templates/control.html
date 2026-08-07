@@ -6,7 +6,7 @@
   <title>Control de misión · Sonda</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/control.css', v='20260807-14') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/control.css', v='20260807-15') }}">
   <script>
     window.CONFIG = { mqttUser: "{{ mqtt_user }}", mqttPass: "{{ mqtt_pass }}", deviceId: "{{ device_id }}", vdoViewUrl: "{{ vdo_view_url }}" };
   </script>
@@ -33,17 +33,21 @@
       <article class="panel preflight-panel">
         <div class="panel-heading"><div><span class="eyebrow">ANTES DEL DESPEGUE</span><h2>Comprobaciones</h2></div><span id="preflight-summary" class="summary-badge">0/6</span></div>
         <div class="check-grid">
-          <div id="chk-movil" class="checklist-item ko"><span class="check-icon">!</span><span>Móvil</span><b id="chk-movil-val">Sin verificar</b></div>
-          <div id="chk-battery" class="checklist-item ko"><span class="check-icon">!</span><span>Batería</span><b id="chk-battery-val">Sin verificar</b></div>
-          <div id="chk-sensors" class="checklist-item ko"><span class="check-icon">!</span><span>Sensor térmico</span><b id="chk-sensors-val">Sin verificar</b></div>
-          <div id="chk-gps" class="checklist-item ko"><span class="check-icon">!</span><span>GPS</span><b id="chk-gps-val">Sin verificar</b></div>
-          <div id="chk-foto" class="checklist-item ko"><span class="check-icon">!</span><span>Foto</span><b id="chk-foto-val">Sin verificar</b></div>
-          <div id="chk-video" class="checklist-item ko"><span class="check-icon">!</span><span>Vídeo</span><b id="chk-video-val">Sin verificar</b></div>
-        </div>
-        <div class="check-actions"><button id="btn-test-systems" class="btn primary" onclick="runSelfTest()">PROBAR SISTEMAS</button></div>
-        <div class="video-check-actions">
-          <button id="btn-video-preview" class="btn secondary" onclick="startVideoPreview()" disabled>INICIAR PREVISUALIZACIÓN</button>
-          <button id="btn-video-confirm" class="btn secondary" onclick="confirmVideo()" disabled>CONFIRMAR VÍDEO</button>
+          <div class="check-column">
+            <div id="chk-movil" class="checklist-item ko"><span class="check-icon">!</span><span>Móvil</span><b id="chk-movil-val">Sin verificar</b></div>
+            <div id="chk-battery" class="checklist-item ko"><span class="check-icon">!</span><span>Batería</span><b id="chk-battery-val">Sin verificar</b></div>
+            <div id="chk-sensors" class="checklist-item ko"><span class="check-icon">!</span><span>Sensor térmico</span><b id="chk-sensors-val">Sin verificar</b></div>
+            <div class="check-actions"><button id="btn-test-systems" class="btn primary" onclick="runSelfTest()">PROBAR SISTEMAS</button></div>
+          </div>
+          <div class="check-column">
+            <div id="chk-gps" class="checklist-item ko"><span class="check-icon">!</span><span>GPS</span><b id="chk-gps-val">Sin verificar</b></div>
+            <div id="chk-foto" class="checklist-item ko"><span class="check-icon">!</span><span>Foto</span><b id="chk-foto-val">Sin verificar</b></div>
+            <div id="chk-video" class="checklist-item ko"><span class="check-icon">!</span><span>Vídeo</span><b id="chk-video-val">Sin verificar</b></div>
+            <div class="video-check-actions">
+              <button id="btn-video-preview" class="btn secondary" onclick="startVideoPreview()" disabled>INICIAR PREVISUALIZACIÓN</button>
+              <button id="btn-video-confirm" class="btn secondary" onclick="confirmVideo()" disabled>CONFIRMAR VÍDEO</button>
+            </div>
+          </div>
         </div>
       </article>
 
@@ -51,8 +55,8 @@
         <div class="panel-heading"><div><span class="eyebrow">SECUENCIA DE LANZAMIENTO</span><h2>Misión preparada</h2></div><span id="mission-state-card" class="state-chip">ESPERA</span></div>
         <div class="countdown"><span>CUENTA ATRÁS</span><strong id="countdown-clock">00:00:10</strong></div>
         <div class="mission-actions">
-          <button id="btn-arm" class="btn warning" onclick="readyLaunch()" disabled>1 · ARMAR SONDA</button>
-          <button id="btn-ready" class="btn danger" onclick="startCountdown()" disabled>2 · INICIAR CUENTA ATRÁS</button>
+          <button id="btn-arm" class="btn warning" onclick="readyLaunch()" disabled>ARMAR SONDA</button>
+          <button id="btn-ready" class="btn danger" onclick="startCountdown()" disabled>INICIAR CUENTA ATRÁS</button>
           <button id="btn-abort" class="btn abort" onclick="abortLaunch()" disabled>ABORTAR</button>
         </div>
       </article>

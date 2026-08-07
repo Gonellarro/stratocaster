@@ -203,6 +203,15 @@ function pollLaunchStatus() {
                 mobileOnline = data.mobile_online;
                 lastSondaPing = (Number(data.mobile_last_seen) || 0) * 1000;
                 updateLinkState('movil', mobileOnline);
+                const mobilePayload = data.mobile_last_payload || {};
+                if (mobileOnline && mobilePayload.status === 'diagnostico') {
+                    checks.movil = true;
+                    checks.sensors = true;
+                    checks.battery = Number(mobilePayload.level) >= 50;
+                    updateChecklistUI('chk-movil', 'ok', 'CONFIRMADO');
+                    updateChecklistUI('chk-sensors', 'ok', `${mobilePayload.temp ?? '--'}°C (OK)`);
+                    updateChecklistUI('chk-battery', checks.battery ? 'ok' : 'ko', `${mobilePayload.level ?? '--'}%`);
+                }
                 const coverageState = mobileOnline ? 'online' : 'offline';
                 if (lastCoverageState === 'offline' && coverageState === 'online') {
                     logMessage('ok', 'COMUNICACIÓN', 'Comunicación móvil recuperada.');
@@ -275,6 +284,10 @@ function pollLaunchStatus() {
             }
             
             // Actualizar botones de control según el nuevo estado
+            if (isSequenceRunning) {
+                const step = testSteps[currentStepIndex];
+                if (step && step.check()) handleStepSuccess();
+            }
             validateChecklist();
         });
 }

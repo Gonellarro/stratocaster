@@ -131,6 +131,7 @@ DEFAULT_STATE = {
     'last_event': 'Sistema en espera',
     'mobile_last_seen': 0.0,
     'mobile_last_status': '',
+    'mobile_last_payload': {},
 }
 
 def load_launch_state():
@@ -180,6 +181,7 @@ def handle_mqtt_status(message):
     state = load_launch_state()
     state['mobile_last_seen'] = time.time()
     state['mobile_last_status'] = payload.get('status', '')
+    state['mobile_last_payload'] = payload
     save_launch_state(state)
 
     if payload.get('status') != 'landed':

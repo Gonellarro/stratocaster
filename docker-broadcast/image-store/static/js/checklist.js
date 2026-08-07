@@ -6,7 +6,24 @@ const testSteps = [
         run: () => { sendCommand('get_status'); },
         check: () => checks.movil,
         timeout: 4000,
-        retries: 3
+        retries: 1,
+        critical: true
+    },
+    {
+        id: 'chk-battery',
+        name: 'Batería Móvil',
+        run: () => {},
+        check: () => checks.battery,
+        timeout: 8000,
+        retries: 1
+    },
+    {
+        id: 'chk-sensors',
+        name: 'Sensores Sonda',
+        run: () => {},
+        check: () => checks.sensors,
+        timeout: 8000,
+        retries: 1
     },
     {
         id: 'chk-gps',
@@ -17,27 +34,11 @@ const testSteps = [
         retries: 1
     },
     {
-        id: 'chk-battery',
-        name: 'Batería Móvil',
-        run: () => { sendCommand('get_status'); },
-        check: () => checks.battery,
-        timeout: 3000,
-        retries: 1
-    },
-    {
-        id: 'chk-sensors',
-        name: 'Sensores Sonda',
-        run: () => { sendCommand('get_status'); },
-        check: () => checks.sensors,
-        timeout: 3000,
-        retries: 1
-    },
-    {
         id: 'chk-audio',
         name: 'Altavoz (TTS)',
         run: () => { sendCommand('test_audio'); },
         check: () => checks.audio,
-        timeout: 5000,
+        timeout: 7000,
         retries: 2
     },
     {
@@ -54,29 +55,33 @@ const testSteps = [
 function runSelfTest() {
     if (isSequenceRunning) return;
     isSequenceRunning = true;
+    loraTestStartedAt = Date.now();
     
     // Resetear estados locales
     checks.movil = false;
-    checks.lora_telemetria = true;
-    checks.lora_meshtastic = true;
+    checks.lora_telemetria = false;
     checks.camera_foto = false;
-    checks.camera_video = true;
+    checks.camera_video = false;
     checks.battery = false;
     checks.sensors = false;
     checks.gps = false;
     checks.audio = false;
+    checks.audio_confirmed = false;
+    audioConfirmed = false;
+    preflightPassed = false;
+    videoConfirmed = false;
+    checklistPassed = false;
 
     resetChecklistUI();
     
     currentStepIndex = 0;
     currentRetry = 0;
+    stepAdvancing = false;
     
     const btn = document.getElementById('btn-test-systems');
     if (btn) {
-        btn.textContent = '🤖 EJECUTANDO AUTO-TEST...';
-        btn.className = 'btn btn-quick btn-outline-red';
-        btn.style.color = 'var(--yellow-accent)';
-        btn.style.borderColor = 'var(--yellow-accent)';
+        btn.textContent = 'COMPROBANDO SISTEMAS...';
+        btn.className = 'btn secondary';
         btn.disabled = true;
     }
 
@@ -87,16 +92,18 @@ function runSelfTest() {
 function executeCurrentStep() {
     if (currentStepIndex >= testSteps.length) {
         isSequenceRunning = false;
-        checklistPassed = true;
+        // La prueba técnica no se convierte en autorización hasta que el
+        // operador confirma el audio y el enlace LoRa tiene una muestra nueva.
         const btn = document.getElementById('btn-test-systems');
         if (btn) {
-            btn.textContent = '🤖 SISTEMAS COMPROBADOS';
-            btn.className = 'btn btn-accent';
-            btn.style.color = '#000';
-            btn.style.borderColor = 'none';
+            btn.textContent = 'SISTEMAS COMPROBADOS';
+            btn.className = 'btn primary';
             btn.disabled = false;
         }
-        logMessage('ok', 'TEST', 'Secuencia de auto-test completada.');
+        logMessage('ok', 'TEST', 'Pruebas técnicas completadas; falta confirmar que el audio se ha oído.');
+        const audioBtn = document.getElementById('btn-audio-confirm');
+        if (audioBtn) audioBtn.disabled = !checks.audio;
+        tryApprovePreflight();
         validateChecklist();
         return;
     }
@@ -121,6 +128,10 @@ function executeCurrentStep() {
 }
 
 function handleStepSuccess() {
+    // Un acuse y su resultado pueden llegar casi juntos. Solo el primero
+    // puede completar el paso actual.
+    if (stepAdvancing) return;
+    stepAdvancing = true;
     clearTimeout(stepTimeoutTimer);
     const step = testSteps[currentStepIndex];
     if (!step) return;
@@ -154,11 +165,13 @@ function handleStepSuccess() {
     setTimeout(() => {
         currentStepIndex++;
         currentRetry = 0;
+        stepAdvancing = false;
         executeCurrentStep();
     }, 500);
 }
 
 function handleStepTimeout() {
+    if (stepAdvancing) return;
     const step = testSteps[currentStepIndex];
     if (!step) {
         clearTimeout(stepTimeoutTimer);
@@ -181,6 +194,11 @@ function handleStepTimeout() {
     } else {
         logMessage('err', 'TEST', `${step.name} falló tras ${maxRetries} intentos.`);
         updateChecklistUI(step.id, 'ko', 'ERROR (KO)');
+
+        if (step.critical) {
+            stopSelfTestOnMobileFailure();
+            return;
+        }
         
         setTimeout(() => {
             currentStepIndex++;
@@ -190,8 +208,26 @@ function handleStepTimeout() {
     }
 }
 
+function stopSelfTestOnMobileFailure() {
+    clearTimeout(stepTimeoutTimer);
+    isSequenceRunning = false;
+    stepAdvancing = false;
+    preflightPassed = false;
+    checklistPassed = false;
+    const btn = document.getElementById('btn-test-systems');
+    if (btn) {
+        btn.textContent = 'REINTENTAR COMPROBACIONES';
+        btn.className = 'btn primary';
+        btn.disabled = false;
+    }
+    const audioBtn = document.getElementById('btn-audio-confirm');
+    if (audioBtn) audioBtn.disabled = true;
+    logMessage('err', 'TEST', 'Móvil sin respuesta. Se detienen las comprobaciones restantes.');
+    validateChecklist();
+}
+
 function resetChecklistUI() {
-    const ids = ['chk-movil', 'chk-lora', 'chk-meshtastic', 'chk-gps', 'chk-battery', 'chk-sensors', 'chk-audio', 'chk-foto'];
+    const ids = ['chk-movil', 'chk-gps', 'chk-battery', 'chk-sensors', 'chk-audio', 'chk-foto', 'chk-video'];
     ids.forEach(id => {
         const item = document.getElementById(id);
         if (item) item.className = 'checklist-item ko';
@@ -200,15 +236,21 @@ function resetChecklistUI() {
     });
     
     checklistPassed = false;
+    stepAdvancing = false;
     checks.movil = false;
     checks.lora_telemetria = false;
-    checks.lora_meshtastic = false;
     checks.camera_foto = false;
     checks.camera_video = false;
     checks.battery = false;
     checks.sensors = false;
     checks.gps = false;
     checks.audio = false;
+    checks.audio_confirmed = false;
+    audioConfirmed = false;
+    preflightPassed = false;
+    videoConfirmed = false;
+    checklistPassed = false;
+    if (typeof updatePreflightSummary === 'function') updatePreflightSummary();
 }
 
 // Vigilante de Enlaces (Heartbeat Watchdog)
@@ -219,28 +261,69 @@ setInterval(() => {
     const mobileTimeout = (mission.state !== 'espera') ? 60000 : 45000;
     
     if (now - lastSondaPing > mobileTimeout) {
+        mobileOnline = false;
         updateLinkState('movil', false);
+        if (lastCoverageState !== 'offline') {
+            lastCoverageState = 'offline';
+            logMessage('err', 'COBERTURA', 'Cobertura móvil perdida. Se conserva la última posición válida.');
+        }
         if (checks.movil) {
             checks.movil = false;
-            logMessage('err', 'CONEXIÓN', 'Pérdida de cobertura de la Sonda Móvil.');
+            if (preflightPassed && mission.state === 'espera') {
+                preflightPassed = false;
+                checklistPassed = false;
+                logMessage('err', 'PRE-VUELO', 'La prueba del móvil ha caducado; hay que repetirla.');
+                fetch('/control_lanzamiento', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action: 'preflight_reset'})});
+            }
         }
     } else if (lastSondaPing > 0) {
-        checks.movil = true;
+        mobileOnline = true;
         updateLinkState('movil', true);
+        if (lastCoverageState !== 'online') {
+            if (lastCoverageState === 'offline') logMessage('ok', 'COBERTURA', 'Cobertura móvil recuperada.');
+            lastCoverageState = 'online';
+        }
     }
     
     // LoRa Telemetría (timeout de 120s / 2 minutos para soportar cadencias de radio espaciadas)
     if (now - lastLoraPing > 120000) {
-        if (checks.lora_telemetria) {
-            checks.lora_telemetria = false;
-            updateLinkState('lora', false);
-            logMessage('err', 'CONEXIÓN', 'Receptor LoRa de Telemetría fuera de línea (sin recepción por >2 min).');
-        }
+        loraOnline = false;
+        updateLinkState('lora', false);
+        if (lastLoraPing > 0) logMessage('err', 'ENLACE', 'Receptor LoRa sin datos por más de 2 minutos.');
     } else if (lastLoraPing > 0) {
-        checks.lora_telemetria = true;
+        loraOnline = true;
         updateLinkState('lora', true);
     }
 
     updateGeneralStatusLarge();
     validateChecklist();
 }, 4000);
+
+function confirmAudioHeard() {
+    if (!checks.audio) return;
+    audioConfirmed = true;
+    checks.audio_confirmed = true;
+    updateChecklistUI('chk-audio', 'ok', 'Oído y confirmado');
+    const button = document.getElementById('btn-audio-confirm');
+    if (button) {
+        button.disabled = true;
+        button.textContent = '🔊 AUDIO CONFIRMADO';
+    }
+    logMessage('ok', 'AUDIO', 'El operador ha confirmado que el audio se oye físicamente.');
+    tryApprovePreflight();
+    validateChecklist();
+}
+
+function tryApprovePreflight() {
+    if (!isSequenceRunning && checks.movil && checks.gps && checks.battery &&
+        checks.sensors && checks.audio && checks.audio_confirmed && checks.camera_foto) {
+        preflightPassed = true;
+        checklistPassed = true;
+        fetch('/control_lanzamiento', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({action: 'preflight_ok'})
+        }).catch(() => logMessage('err', 'MISIÓN', 'No se pudo registrar el pre-vuelo en el servidor.'));
+        logMessage('ok', 'TEST', 'Pre-vuelo aprobado. Ahora hay que verificar el vídeo en OBS.');
+    }
+}

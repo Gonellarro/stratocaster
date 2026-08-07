@@ -10,7 +10,8 @@
 4. Buscar (botón de lupa): Termux API. Descargar e instalar.
 
 # Instalar dependencias
-- Instalar mosquitto, jq, curl y openssl. Escribir en la terminal: `pkg install -y jq curl mosquitto openssl`
+- Instalar mosquitto, jq, curl, openssl y el reproductor multimedia. Escribir en la terminal: `pkg install -y jq curl mosquitto openssl termux-api`
+- El programa necesita también el comando `termux-media-player`, incluido en Termux:API, para la alarma de recuperación y los mensajes pregrabados.
 
 # Permisos especiales
 - Otorgar el permiso especial "Mostrar sobre otras aplicaciones" (Draw over other apps). Es muy importante conceder este permiso tanto a Termux como a Termux:API en los ajustes de Android.
@@ -46,6 +47,10 @@ El resultado debe tener un formato similar a este:
 	- Mover la foto a la carpeta de imágenes públicas para verificarla: `mv foto.jpg ~/storage/shared/Pictures/`
 	- Confirmar que la foto aparece en la galería del teléfono.
 - Probar la síntesis de voz (TTS): `termux-tts-speak "Iniciando búsqueda de satélites GPS."`
+- Crear y probar los audios de recuperación en `~/sonidos/`:
+  - `alarma_recuperacion.mp3`
+  - `mensaje_1.mp3`
+  - Prueba: `termux-media-player play ~/sonidos/alarma_recuperacion.mp3`
 
 ---
 

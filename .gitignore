@@ -19,6 +19,9 @@ docker-TIG/mosquitto/certs/*.srl
 docker-TIG/.env
 docker-broadcast/.env
 codigo/Android/sonda.env
+codigo/Android/sonda.env_staging
+docker-broadcast/.env.staging
+docker-TIG/.env.staging
 codigo/RXLora/secrets.h
 docker-TIG/mosquitto/config/password_file
 __pycache__/

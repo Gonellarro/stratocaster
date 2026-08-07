@@ -18,21 +18,18 @@ L.control.layers(baseLayers).addTo(map);
 
 // Marcadores neón y rutas (se añaden dinámicamente al recibir coordenadas válidas)
 let markers = {
-    movil: L.circleMarker([0, 0], { color: '#06b6d4', fillColor: '#06b6d4', fillOpacity: 0.8, radius: 8 }),
-    lora: L.circleMarker([0, 0], { color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.8, radius: 8 }),
-    mesh: L.circleMarker([0, 0], { color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.8, radius: 8 })
+    movil: L.circleMarker([0, 0], { color: '#0891b2', fillColor: '#0891b2', fillOpacity: 0.85, radius: 8 }),
+    lora: L.circleMarker([0, 0], { color: '#dc2626', fillColor: '#dc2626', fillOpacity: 0.85, radius: 8 })
 };
 
 let markerAdded = {
     movil: false,
-    lora: false,
-    mesh: false
+    lora: false
 };
 
 let paths = {
-    movil: L.polyline([], { color: '#06b6d4', weight: 3 }).addTo(map),
-    lora: L.polyline([], { color: '#ef4444', weight: 3, dashArray: '5, 5' }).addTo(map),
-    mesh: L.polyline([], { color: '#f59e0b', weight: 3, dashArray: '2, 5' }).addTo(map)
+    movil: L.polyline([], { color: '#0891b2', weight: 3 }).addTo(map),
+    lora: L.polyline([], { color: '#dc2626', weight: 3, dashArray: '5, 5' }).addTo(map)
 };
 
 // Función para actualizar posición y trazar rutas

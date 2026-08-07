@@ -129,20 +129,21 @@ Una vez que el servidor terrestre y el móvil están en marcha, el operador real
    * **Sensores:** Lee la temperatura interna del terminal.
    * **Altavoz:** Manda un pitido y orden TTS al móvil. Escucharás: *"Sonda en línea..."*.
    * **Cámara (Foto):** Toma una foto con la cámara trasera, la sube al servidor y la muestra en la tarjeta "Cámara de vuelo".
-4. *Los módulos LoRa de telemetría y red mallada Meshtastic se marcan automáticamente como **Omitido** (en verde) para saltarse las restricciones de hardware en esta fase.*
-5. Si todos los checks indispensables del móvil pasan a color verde, el botón rojo **🚀 INICIAR CUENTA ATRÁS** se habilitará automáticamente.
+4. El operador debe confirmar manualmente que ha oído la prueba de audio.
+5. Pulsa **INICIAR PREVISUALIZACIÓN** y verifica visualmente en OBS que VDO.ninja muestra la cámara trasera actual. Después pulsa **CONFIRMAR VÍDEO EN OBS**.
+6. La telemetría LoRa debe haber entregado una muestra nueva durante el autotest. Los módulos no utilizados se muestran como **No requerido**, nunca como aprobados.
+7. Solo después de todo lo anterior se habilita **ARMAR SONDA**.
 
 ---
 
 ## 🚀 5. El Despegue y Control del Vuelo (Fases)
 
 ### Secuencia de Lanzamiento (T-10 segundos)
-1. Con todos los checks en verde, haz clic en **🚀 INICIAR CUENTA ATRÁS**.
-2. Ocurren tres acciones automatizadas de forma instantánea:
-   * Se envía por radio el comando `arm` al terminal móvil. El móvil responde confirmando su estado y dice por altavoz: *"Sonda Armada. Despegue inminente."*.
-   * La recepción de comandos se detiene en el móvil para que ningún comando terrestre pueda interferir en el vuelo.
-   * La interfaz web activa el segundero central y el HUD de realización de OBS muestra una cuenta atrás gigante en pantalla.
-3. Al llegar el reloj a `00:00:00`, se activa la **Fase 1: Ignición**.
+1. Con todos los checks y el vídeo confirmados, pulsa **ARMAR SONDA**.
+2. El móvil responde `armed`, reproduce el aviso de armado y queda esperando. Todavía no inicia la Fase 1.
+3. Cuando el operador confirma que todo sigue correcto, pulsa **🚀 INICIAR CUENTA ATRÁS**.
+4. El servidor inicia el segundero y, al llegar a `00:00:00`, envía la orden `launch` al móvil.
+5. El móvil confirma `launched` y activa la **Fase 1: Ignición**.
 
 ### Fase 1: Vuelo en Directo (Streaming)
 * El terminal móvil abre de forma automática Google Chrome con la emisión configurada de VDO.ninja de la cámara trasera.
@@ -161,6 +162,8 @@ Una vez que el servidor terrestre y el móvil están en marcha, el operador real
   4. Envía un paquete JSON por MQTT en `sonda/camera` con las coordenadas, altitud y la URL de la imagen.
 * Si el teléfono pierde cobertura 4G temporalmente durante el ascenso, el script almacena la telemetría en el log local `sonda_offline.log` para no perder el registro de la misión.
 * La galería de imágenes de la web (`/fotos`) se actualizará automáticamente con las últimas fotografías y vistas espaciales enviadas desde la estratosfera.
+* Si el móvil detecta que ha descendido y permanece varios minutos estable con velocidad baja, entra en estado `landed` y reproduce en ciclos `~/sonidos/alarma_recuperacion.mp3`. Esta detección es local y funciona sin cobertura.
+* Con cobertura, el operador puede solicitar la alarma de recuperación, `message_1` o detener el audio. Solo se permiten archivos preinstalados.
 
 ### Abortar Lanzamiento
 Si durante la cuenta atrás de 10 segundos el operador detecta anomalías en rampa, puede pulsar el botón **🚨 ABORTAR LANZAMIENTO** (situado justo debajo del temporizador).

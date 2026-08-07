@@ -1,12 +1,19 @@
 // Obtener el identificador del dispositivo a controlar de los parámetros de la URL
 const urlParams = new URLSearchParams(window.location.search);
-const targetDeviceID = urlParams.get('device_id') || 'movil_sonda_1';
+const targetDeviceID = (window.CONFIG && window.CONFIG.deviceId) || urlParams.get('device_id') || 'movil_sonda_1';
 
-function sendCommand(cmdName) {
-    if (!client || !client.connected) return;
-    const payload = JSON.stringify({ cmd: cmdName });
-    client.publish(`sonda/mobile/${targetDeviceID}/command`, payload);
-    console.log(`MQTT Publish sonda/mobile/${targetDeviceID}/command:`, cmdName);
+function sendCommand(cmdName, extra = {}) {
+    const commandId = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
+    fetch('/device_command', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({cmd: cmdName, device_id: targetDeviceID, command_id: commandId, ...extra})
+    }).then(async response => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${body.error || body.message || 'sin detalle'}`);
+        console.log('Orden aceptada por Flask:', cmdName, commandId, body);
+        logMessage('ok', 'COMANDO', `${cmdName} aceptado por Flask (${commandId})`);
+    }).catch(error => logMessage('err', 'COMANDO', `No se pudo enviar ${cmdName}: ${error.message}`));
 }
 
 // Inicialización de Conexión MQTT
@@ -41,19 +48,9 @@ client.on('connect', () => {
     
     // Suscripciones de telemetría de radio generales (LoRa y Mesh)
     client.subscribe('sonda/lora/+/telemetry');
-    client.subscribe('sonda/mesh/+/telemetry');
     client.subscribe('gps/data');
     
-    // Solicitar primer reporte de estado
-    sendCommand('get_status');
 });
-
-// Polling de estado periódico al móvil durante pre-despegue (cada 15s)
-setInterval(() => {
-    if (client && client.connected && (typeof mission === 'undefined' || mission.state === 'espera')) {
-        sendCommand('get_status');
-    }
-}, 15000);
 
 client.on('message', (topic, message) => {
     let payload;
@@ -69,7 +66,7 @@ client.on('message', (topic, message) => {
     // 1. Mensajes específicos del móvil que estamos controlando/monitoreando
     if (topic === `sonda/mobile/${targetDeviceID}/status`) {
         lastSondaPing = Date.now();
-        checks.movil = true;
+        mobileOnline = true;
         updateLinkState('movil', true);
         
         if (payload.status === 'diagnostico') {
@@ -80,30 +77,22 @@ client.on('message', (topic, message) => {
     } 
     else if (topic === `sonda/mobile/${targetDeviceID}/telemetry`) {
         lastSondaPing = Date.now();
-        checks.movil = true;
+        mobileOnline = true;
         updateLinkState('movil', true);
         handleMobileTelemetry(payload);
     }
     else if (topic === `sonda/mobile/${targetDeviceID}/camera`) {
         lastSondaPing = Date.now();
-        checks.movil = true;
+        mobileOnline = true;
         updateLinkState('movil', true);
         handleCameraEvent(payload);
     }
     // 2. Mensajes de receptor LoRa (estructura estandarizada sonda/lora/+/telemetry o legacy gps/data)
     else if ((topicParts[0] === 'sonda' && topicParts[1] === 'lora' && topicParts[3] === 'telemetry') || topic === 'gps/data') {
         lastLoraPing = Date.now();
-        checks.lora_telemetria = true;
+        loraOnline = true;
         updateLinkState('lora', true);
         handleLoraTelemetry(payload);
-    }
-    // 3. Mensajes de Meshtastic (el ID de nodo se extrae del topic)
-    else if (topicParts[0] === 'sonda' && topicParts[1] === 'mesh' && topicParts[3] === 'telemetry') {
-        lastMeshPing = Date.now();
-        checks.lora_meshtastic = true;
-        updateLinkState('meshtastic', true);
-        const nodeId = parseInt(topicParts[2]) || payload.node_id;
-        handleMeshtasticEvent(payload, nodeId);
     }
     
     // Si la secuencia de autotest está activa, comprobar éxito del paso actual

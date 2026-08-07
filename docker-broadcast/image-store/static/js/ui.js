@@ -17,6 +17,20 @@ function updateChecklistUI(id, state, labelText) {
     }
     
     if (val) val.textContent = labelText;
+
+    const summary = document.getElementById('preflight-summary');
+    if (summary) {
+        const checkIds = ['chk-movil', 'chk-gps', 'chk-battery', 'chk-sensors', 'chk-audio', 'chk-foto', 'chk-video'];
+        const passed = checkIds.filter(checkId => document.getElementById(checkId)?.classList.contains('ok')).length;
+        summary.textContent = `${passed}/7`;
+    }
+}
+
+function updatePreflightSummary() {
+    const summary = document.getElementById('preflight-summary');
+    if (!summary) return;
+    const ids = ['chk-movil', 'chk-gps', 'chk-battery', 'chk-sensors', 'chk-audio', 'chk-foto', 'chk-video'];
+    summary.textContent = `${ids.filter(checkId => document.getElementById(checkId)?.classList.contains('ok')).length}/7`;
 }
 
 function updateLinkState(linkId, connected) {
@@ -46,7 +60,7 @@ function updateGeneralStatusLarge() {
     if (!large) return;
     
     let disconnectedCount = 0;
-    if (!checks.movil) disconnectedCount++;
+    if (!mobileOnline) disconnectedCount++;
     
     if (disconnectedCount === 0) {
         large.textContent = 'OK';

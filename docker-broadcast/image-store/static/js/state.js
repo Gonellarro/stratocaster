@@ -7,18 +7,25 @@ let isTesting = false;
 let currentPhase = 1;
 let mapCentered = false;
 let checklistPassed = false;
+let preflightPassed = false;
+let videoConfirmed = false;
+let audioConfirmed = false;
+let lastCoverageState = 'unknown';
+let loraTestStartedAt = 0;
+let mobileOnline = false;
+let loraOnline = false;
 
 // Checklist local status variables (Todas en false hasta ejecutar comprobación explícita)
 let checks = {
     movil: false,
     lora_telemetria: false,
-    lora_meshtastic: false,
     camera_foto: false,
     camera_video: false,
     battery: false,
     sensors: false,
     gps: false,
-    audio: false
+    audio: false,
+    audio_confirmed: false
 };
 
 // Secuenciador de pruebas pre-vuelo
@@ -26,6 +33,7 @@ let currentStepIndex = -1;
 let currentRetry = 0;
 let stepTimeoutTimer = null;
 let isSequenceRunning = false;
+let stepAdvancing = false;
 
 // Estructura de Misión
 let mission = {

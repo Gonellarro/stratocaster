@@ -20,12 +20,30 @@ services:
     env_file:
       - .env
     environment:
-      - CONTROL_USER=${CONTROL_USER:-admin}
-      - CONTROL_PASS=${CONTROL_PASS:-admin}
-      - TELEGRAF_MQTT_USER=${TELEGRAF_MQTT_USER:-admin}
-      - TELEGRAF_MQTT_PASSWORD=${TELEGRAF_MQTT_PASSWORD:-admin}
-      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-stratocaster_secret_key}
+      - CONTROL_USER=${CONTROL_USER}
+      - CONTROL_PASS=${CONTROL_PASS}
+      - TELEGRAF_MQTT_USER=${TELEGRAF_MQTT_USER}
+      - TELEGRAF_MQTT_PASSWORD=${TELEGRAF_MQTT_PASSWORD}
+      - MQTT_HOST=${MQTT_HOST}
+      - MQTT_PORT=${MQTT_PORT:-1883}
+      - MQTT_COMMAND_USER=${MQTT_COMMAND_USER}
+      - MQTT_COMMAND_PASSWORD=${MQTT_COMMAND_PASSWORD}
+      - MQTT_VIEW_USER=${MQTT_VIEW_USER}
+      - MQTT_VIEW_PASSWORD=${MQTT_VIEW_PASSWORD}
+      - SONDA_DEVICE_ID=${SONDA_DEVICE_ID:-movil_sonda_1}
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
     volumes:
       - ./image-store:/app
       - ./images:/app/images
+      - launch_state:/data
+    networks:
+      - default
+      - telemetry_net
 
+volumes:
+  launch_state:
+
+networks:
+  telemetry_net:
+    external: true
+    name: sonda_telemetry

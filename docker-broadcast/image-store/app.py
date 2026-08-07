@@ -3,9 +3,15 @@ import uuid
 import json
 import datetime
 import time
+import tempfile
 from functools import wraps
 from flask import Flask, request, send_from_directory, render_template, jsonify, session, redirect, url_for
 from werkzeug.utils import secure_filename
+
+try:
+    import paho.mqtt.publish as mqtt_publish
+except ImportError:  # El contenedor lo instala; permite importar la app en tests mínimos.
+    mqtt_publish = None
 
 app = Flask(__name__)
 
@@ -16,12 +22,17 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Credenciales de Administrador (leídas de variables de entorno o valores por defecto)
-CONTROL_USER = os.environ.get('CONTROL_USER', 'admin')
-CONTROL_PASS = os.environ.get('CONTROL_PASS', 'admin')
+CONTROL_USER = os.environ.get('CONTROL_USER', '')
+CONTROL_PASS = os.environ.get('CONTROL_PASS', '')
 
 # Credenciales MQTT del Broker a inyectar en las vistas autenticadas
-MQTT_USER = os.environ.get('TELEGRAF_MQTT_USER', 'admin')
-MQTT_PASS = os.environ.get('TELEGRAF_MQTT_PASSWORD', 'AWLCxdfGxwohHF2qpScJLK9AbRAFxD')
+MQTT_HOST = os.environ.get('MQTT_HOST', '')
+MQTT_PORT = int(os.environ.get('MQTT_PORT', '1883'))
+MQTT_USER = os.environ.get('MQTT_COMMAND_USER', os.environ.get('TELEGRAF_MQTT_USER', ''))
+MQTT_PASS = os.environ.get('MQTT_COMMAND_PASSWORD', os.environ.get('TELEGRAF_MQTT_PASSWORD', ''))
+MQTT_VIEW_USER = os.environ.get('MQTT_VIEW_USER', os.environ.get('TELEGRAF_MQTT_USER', ''))
+MQTT_VIEW_PASS = os.environ.get('MQTT_VIEW_PASSWORD', os.environ.get('TELEGRAF_MQTT_PASSWORD', ''))
+DEVICE_ID = os.environ.get('SONDA_DEVICE_ID', 'movil_sonda_1')
 
 # Estado global del lanzamiento (en memoria)
 LAUNCH_STATE = {
@@ -52,11 +63,19 @@ def api_auth_required(f):
 @app.after_request
 def add_cors_headers(response):
     origin = request.headers.get('Origin')
-    if origin:
-        if 'localhost' in origin or '127.0.0.1' in origin or '192.168.' in origin or 'stratocaster.martivich.es' in origin:
-            response.headers['Access-Control-Allow-Origin'] = origin
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    allowed_origins = {
+        'https://stratocaster.martivich.es',
+        'https://staging-stratocaster.martivich.es',
+        'http://localhost:5000',
+        'http://127.0.0.1:5000',
+    }
+    if origin in allowed_origins:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Vary'] = 'Origin'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, X-CSRF-Token'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Referrer-Policy'] = 'same-origin'
     return response
 
 # ------------------------------------------------------------------------------
@@ -91,15 +110,23 @@ def logout():
 # ENDPOINTS DE CONTROL DE LANZAMIENTO (API REST)
 # ------------------------------------------------------------------------------
 
-STATE_FILE = '/tmp/launch_state.json'
+STATE_FILE = os.environ.get('LAUNCH_STATE_FILE', '/data/launch_state.json')
+COUNTDOWN_SECONDS = 10
+
+DEFAULT_STATE = {
+    'mission_id': '',
+    'estado': 'espera',
+    'tiempo_restante': 0,
+    'timestamp_inicio': 0.0,
+    'timestamp_mision': 0.0,
+    'preflight_passed': False,
+    'video_confirmed': False,
+    'last_command_id': '',
+    'last_event': 'Sistema en espera',
+}
 
 def load_launch_state():
-    default_state = {
-        'estado': 'espera',
-        'tiempo_restante': 0,
-        'timestamp_inicio': 0.0,
-        'timestamp_mision': 0.0
-    }
+    default_state = dict(DEFAULT_STATE)
     if not os.path.exists(STATE_FILE):
         return default_state
     try:
@@ -110,21 +137,50 @@ def load_launch_state():
 
 def save_launch_state(state):
     try:
-        with open(STATE_FILE, 'w', encoding='utf-8') as f:
+        os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(prefix='launch-', suffix='.json', dir=os.path.dirname(STATE_FILE))
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, STATE_FILE)
     except Exception as e:
         app.logger.error(f"Error saving launch state: {e}")
+
+def publish_command(command, command_id):
+    """Publica una orden de misión; el móvil debe devolver un acuse con el ID."""
+    if mqtt_publish is None:
+        app.logger.error('paho-mqtt no está instalado; no se puede publicar la orden')
+        return False
+    try:
+        payload = json.dumps({'cmd': command, 'command_id': command_id, 'expires_at': time.time() + 30})
+        mqtt_publish.single(
+            f'sonda/mobile/{DEVICE_ID}/command', payload=payload,
+            hostname=MQTT_HOST, port=MQTT_PORT,
+            auth={'username': MQTT_USER, 'password': MQTT_PASS} if MQTT_USER else None,
+            qos=1, retain=False, keepalive=10,
+        )
+        app.logger.info('Orden MQTT publicada: cmd=%s device=%s host=%s:%s',
+                        command, DEVICE_ID, MQTT_HOST, MQTT_PORT)
+        return True
+    except Exception as exc:
+        app.logger.error('Error publicando comando %s: %s', command, exc)
+        return False
 
 def update_countdown_state():
     """Calcula dinámicamente el tiempo restante de la cuenta atrás."""
     state = load_launch_state()
     if state.get('estado') == 'cuenta_atras':
         elapsed = time.time() - state.get('timestamp_inicio', 0.0)
-        remaining = 10 - int(elapsed)
+        remaining = COUNTDOWN_SECONDS - int(elapsed)
         if remaining <= 0:
             state['estado'] = 'lanzado'
             state['tiempo_restante'] = 0
+            command_id = uuid.uuid4().hex
+            state['last_command_id'] = command_id
+            state['last_event'] = 'Cuenta atrás completada; orden de lanzamiento enviada'
             save_launch_state(state)
+            publish_command('launch', command_id)
         else:
             if state.get('tiempo_restante') != remaining:
                 state['tiempo_restante'] = remaining
@@ -142,44 +198,106 @@ def change_launch_status():
     state = load_launch_state()
     data = request.json or {}
     action = data.get('action')
-    
-    if action == 'armar':
+
+    def reject(message):
+        return jsonify({'error': message, 'state': state}), 409
+
+    if action == 'preflight_ok':
+        if state.get('estado') != 'espera':
+            return reject('No se puede aprobar el pre-vuelo durante una misión activa')
+        state['preflight_passed'] = True
+        state['video_confirmed'] = bool(data.get('video_confirmed', state.get('video_confirmed')))
+        state['estado'] = 'espera'
+        state['last_event'] = 'Pruebas pre-vuelo aprobadas'
+    elif action == 'preflight_reset':
+        if state.get('estado') != 'espera':
+            return reject('No se puede invalidar el pre-vuelo durante una misión activa')
+        state['preflight_passed'] = False
+        state['video_confirmed'] = False
+        state['last_event'] = 'Pruebas pre-vuelo caducadas; repetir autotest'
+    elif action == 'video_confirmed':
+        if state.get('estado') != 'espera' or not state.get('preflight_passed'):
+            return reject('Las pruebas pre-vuelo deben estar aprobadas antes del vídeo')
+        state['video_confirmed'] = True
+        state['last_event'] = 'Vídeo confirmado visualmente por el operador'
+    elif action == 'armar':
+        if state.get('estado') != 'espera' or not state.get('preflight_passed') or not state.get('video_confirmed'):
+            return reject('Faltan pruebas pre-vuelo o confirmación visual del vídeo')
         state['estado'] = 'armando'
         state['tiempo_restante'] = 0
         state['timestamp_inicio'] = 0.0
         state['timestamp_mision'] = 0.0
+        state['mission_id'] = data.get('mission_id') or f"MISIÓN_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        command_id = uuid.uuid4().hex
+        state['last_command_id'] = command_id
+        state['last_event'] = 'Orden ARMAR enviada; esperando acuse del móvil'
+        if not publish_command('arm', command_id):
+            return reject('No se pudo enviar la orden ARMAR')
+    elif action == 'armada':
+        if state.get('estado') != 'armando':
+            return reject('El móvil no puede confirmar ARMADA en la fase actual')
+        state['estado'] = 'armada'
+        state['last_event'] = 'Móvil armado y esperando lanzamiento'
     elif action == 'ok':
+        if state.get('estado') != 'armada':
+            return reject('El móvil debe confirmar ARMADA antes de la cuenta atrás')
         now = time.time()
         state['estado'] = 'cuenta_atras'
         state['timestamp_inicio'] = now
         state['timestamp_mision'] = now
-        state['tiempo_restante'] = 10
+        state['tiempo_restante'] = COUNTDOWN_SECONDS
+        state['last_event'] = 'Cuenta atrás iniciada'
     elif action == 'abortar' or action == 'reset':
+        command_id = uuid.uuid4().hex
+        publish_command('abort', command_id)
         state['estado'] = 'espera'
         state['tiempo_restante'] = 0
         state['timestamp_inicio'] = 0.0
         state['timestamp_mision'] = 0.0
+        state['preflight_passed'] = False
+        state['video_confirmed'] = False
+        state['last_command_id'] = command_id
+        state['last_event'] = 'Misión abortada; sistema en espera'
     elif action == 'finalizar':
         state['estado'] = 'recuperacion'
         state['tiempo_restante'] = 0
         state['timestamp_inicio'] = 0.0
-        
+        state['last_event'] = 'Misión en recuperación'
+    else:
+        return reject('Acción desconocida')
+
     save_launch_state(state)
     return jsonify(state)
 
-@app.route('/control_lanzamiento/ok', methods=['POST'])
-def sonda_confirm_ok():
-    """Endpoint directo para que el móvil de la sonda confirme que está listo para el lanzamiento."""
+@app.route('/control_lanzamiento/ack', methods=['POST'])
+@api_auth_required
+def sonda_command_ack():
+    """Registra acuses del dispositivo sin iniciar transiciones implícitas."""
     state = load_launch_state()
-    if state.get('estado') != 'armando':
-        return jsonify({'status': 'ignored', 'message': f"Estado actual es '{state.get('estado')}', no 'armando'."}), 200
-    now = time.time()
-    state['estado'] = 'cuenta_atras'
-    state['timestamp_inicio'] = now
-    state['timestamp_mision'] = now
-    state['tiempo_restante'] = 10
+    data = request.json or {}
+    if data.get('device_id', DEVICE_ID) != DEVICE_ID:
+        return jsonify({'error': 'device_id no autorizado'}), 403
+    state['last_event'] = f"Acuse móvil: {data.get('status', 'desconocido')}"
     save_launch_state(state)
-    return jsonify({'status': 'ok', 'message': 'Countdown started'})
+    return jsonify({'status': 'ok', 'state': state})
+
+@app.route('/device_command', methods=['POST'])
+@api_auth_required
+def device_command():
+    """Puerta autenticada para comandos de diagnóstico y recuperación."""
+    data = request.json or {}
+    device_id = data.get('device_id', DEVICE_ID)
+    command = data.get('cmd', '')
+    allowed = {
+        'get_status', 'init_gps', 'test_audio', 'test_video_on',
+        'test_video_off', 'test_photo', 'play_audio', 'stop_audio',
+    }
+    if device_id != DEVICE_ID or command not in allowed:
+        return jsonify({'error': 'Comando o dispositivo no permitido'}), 403
+    command_id = data.get('command_id') or uuid.uuid4().hex
+    if not publish_command(command, command_id):
+        return jsonify({'error': 'No se pudo publicar el comando'}), 503
+    return jsonify({'status': 'sent', 'command_id': command_id})
 
 # ------------------------------------------------------------------------------
 # ENDPOINTS DE ARCHIVOS (IMÁGENES & UPLOADS)
@@ -279,7 +397,8 @@ def last_image():
 @app.route('/control')
 @login_required
 def control_panel():
-    return render_template('control.html', mqtt_user=MQTT_USER, mqtt_pass=MQTT_PASS)
+    return render_template('control.html', mqtt_user=MQTT_VIEW_USER, mqtt_pass=MQTT_VIEW_PASS,
+                           device_id=DEVICE_ID)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

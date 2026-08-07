@@ -1,0 +1,9 @@
+# Dependencias del script de la sonda para Termux.
+# Se instalan con: pkg install <paquetes>
+mosquitto
+jq
+coreutils
+curl
+procps
+termux-api
+netcat-openbsd

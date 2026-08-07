@@ -27,6 +27,9 @@ services:
       - ./mosquitto/data:/mosquitto/data
       - ./mosquitto/log:/mosquitto/log
       - ./mosquitto/certs:/mosquitto/certs
+    networks:
+      - default
+      - telemetry_net
 
   telegraf:
     image: telegraf:${TELEGRAF_VERSION}
@@ -44,6 +47,9 @@ services:
     depends_on:
       - influxdb
       - mosquitto
+    networks:
+      - default
+      - telemetry_net
     ports:
       - '8125:8125'
 
@@ -60,7 +66,7 @@ services:
       - INFLUX_TOKEN=${INFLUX_TOKEN}
       - INFLUX_ORG=${INFLUX_ORG}
       - INFLUX_BUCKET=${INFLUX_BUCKET}
-      - GF_SERVER_ROOT_URL=https://stratocaster.martivich.es/grafana/
+      - GF_SERVER_ROOT_URL=${GF_SERVER_ROOT_URL:-https://stratocaster.martivich.es/grafana/}
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
       - GF_SECURITY_ALLOW_EMBEDDING=true
     ports:
@@ -69,5 +75,8 @@ services:
       - ./grafana:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
 
-
+networks:
+  telemetry_net:
+    external: true
+    name: sonda_telemetry
 

@@ -1,31 +1,56 @@
 // Gestión de Acciones de Lanzamiento y Secuencias REST
 function readyLaunch() {
-    logMessage('warn', 'MISIÓN', 'Preparando despegue: Armando la sonda e iniciando señal de vídeo...');
+    logMessage('warn', 'MISIÓN', 'Enviando orden ARMAR. El móvil seguirá esperando el lanzamiento.');
     mission.state = 'armando';
     validateChecklist();
-    
-    // Enviar arm al móvil por MQTT para iniciar Fase 1
-    sendCommand('arm');
-
-    // Avisar a Flask para registrar el inicio de misión
     fetch('/control_lanzamiento', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'armar' })
-    }).then(validateChecklist);
+        body: JSON.stringify({ action: 'armar', mission_id: mission.id })
+    }).then(async response => {
+        if (!response.ok) throw new Error(await response.text());
+        validateChecklist();
+    }).catch(error => {
+        mission.state = 'espera';
+        validateChecklist();
+        logMessage('err', 'MISIÓN', 'No se pudo armar: ' + error.message);
+    });
 }
 
 function startCountdown() {
-    logMessage('warn', 'MISIÓN', 'Iniciando la cuenta atrás para el lanzamiento en el HUD...');
-    mission.state = 'cuenta_atras';
-    validateChecklist();
-    
-    // Avisar a Flask para arrancar el segundero de la cuenta atrás
+    logMessage('warn', 'MISIÓN', 'Iniciando la cuenta atrás. El lanzamiento se enviará al llegar a cero.');
     fetch('/control_lanzamiento', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'ok' })
-    }).then(validateChecklist);
+    }).then(async response => {
+        if (!response.ok) throw new Error(await response.text());
+        mission.state = 'cuenta_atras';
+        validateChecklist();
+    }).catch(error => logMessage('err', 'MISIÓN', 'No se pudo iniciar la cuenta atrás: ' + error.message));
+}
+
+function startVideoPreview() {
+    sendCommand('test_video_on');
+    switchCameraTab('video');
+    updateChecklistUI('chk-video', 'testing', 'Esperando imagen en OBS...');
+    const confirm = document.getElementById('btn-video-confirm');
+    if (confirm) confirm.disabled = false;
+    logMessage('info', 'VÍDEO', 'Previsualización solicitada. Confirma visualmente la imagen en OBS.');
+}
+
+function confirmVideo() {
+    if (mission.state !== 'espera' || !preflightPassed) return;
+    videoConfirmed = true;
+    checks.camera_video = true;
+    updateChecklistUI('chk-video', 'ok', 'Confirmado en OBS');
+    const videoLink = document.getElementById('video-link-state');
+    if (videoLink) { videoLink.textContent = 'OBS CONFIRMADO'; videoLink.className = 'link-badge connected'; }
+    fetch('/control_lanzamiento', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'video_confirmed'})
+    }).then(() => validateChecklist()).catch(() => logMessage('err', 'VÍDEO', 'No se pudo registrar la confirmación.'));
+    logMessage('ok', 'VÍDEO', 'El operador confirma que la imagen es correcta en OBS.');
 }
 
 function abortLaunch() {
@@ -33,13 +58,11 @@ function abortLaunch() {
     mission.state = 'espera';
     checklistPassed = false;
     
-    // Detener vídeo en móvil y resetear script
-    sendCommand('abort');
-
     // Reiniciar estados locales
     isTesting = false;
     checks.camera_foto = false;
     checks.camera_video = false;
+    resetChecklistUI();
     updateChecklistUI('chk-foto', false, 'Abortado');
     updateChecklistUI('chk-video', false, 'Abortado');
 
@@ -58,8 +81,8 @@ function abortLaunch() {
 }
 
 function triggerBuzzer() {
-    logMessage('warn', 'LORA', 'Enviando pulso de radio para activar la baliza sonora en el ESP32...');
-    sendCommand('sirena_on');
+    logMessage('warn', 'RECUPERACIÓN', 'Solicitando alarma sonora en el móvil...');
+    sendCommand('play_audio', {audio_id: 'recovery_alarm'});
 }
 
 function finalizeMission() {
@@ -95,40 +118,48 @@ function validateChecklist() {
     const btnReady = document.getElementById('btn-ready');
     const btnArm = document.getElementById('btn-arm');
     const btnAbort = document.getElementById('btn-abort');
+    const btnPreview = document.getElementById('btn-video-preview');
+    const btnVideoConfirm = document.getElementById('btn-video-confirm');
     
     if (!btnReady || !btnArm || !btnAbort) return;
 
     // Si la verificación completa tuvo éxito o todos los checks están OK:
-    const isReady = checklistPassed || (checks.movil && checks.gps && checks.battery && checks.sensors && checks.audio && checks.camera_foto);
+    const isReady = preflightPassed && videoConfirmed;
     if (isReady) {
         checklistPassed = true;
     }
     
     // Botón Abortar siempre activo durante misiones en curso
-    if (mission.state === 'armando' || mission.state === 'cuenta_atras' || mission.state === 'lanzado') {
+    if (mission.state === 'armando' || mission.state === 'armada' || mission.state === 'cuenta_atras' || mission.state === 'lanzado') {
         btnAbort.disabled = false;
     } else {
         btnAbort.disabled = true;
     }
 
-    // SI LA MISIÓN NO ESTÁ EN ESPERA: congelamos estado del botón "Listo"
-    if (mission.state !== 'espera') {
-        btnReady.disabled = true;
-        if (mission.state === 'armando') {
-            btnArm.disabled = false;
-        } else {
-            btnArm.disabled = true;
-        }
+    // La previsualización y confirmación solo son posibles antes de armar.
+    if (btnPreview) btnPreview.disabled = !(mission.state === 'espera' && preflightPassed);
+    if (btnVideoConfirm) btnVideoConfirm.disabled = !(mission.state === 'espera' && preflightPassed && !videoConfirmed);
+
+    if (mission.state === 'armada') {
+        // El armado ya está confirmado: ahora se puede iniciar la cuenta atrás.
+        btnArm.disabled = true;
+        btnReady.disabled = false;
         return;
     }
 
-    // EN ESPERA:
+    if (mission.state !== 'espera') {
+        btnReady.disabled = true;
+        btnArm.disabled = true;
+        return;
+    }
+
+    // En espera: primero ARMAR y después iniciar la cuenta atrás.
     if (!isReady) {
         btnReady.disabled = true;
         btnArm.disabled = true;
     } else {
-        btnReady.disabled = false;
-        btnArm.disabled = true;
+        btnReady.disabled = true;
+        btnArm.disabled = false;
     }
 }
 
@@ -137,6 +168,10 @@ function pollLaunchStatus() {
         .then(r => r.json())
         .then(data => {
             mission.state = data.estado;
+            if (data.mission_id) mission.id = data.mission_id;
+            preflightPassed = Boolean(data.preflight_passed || preflightPassed);
+            videoConfirmed = Boolean(data.video_confirmed || videoConfirmed);
+            checklistPassed = preflightPassed;
             
             const stateCard = document.getElementById('mission-state-card');
             if (stateCard) {
@@ -168,10 +203,10 @@ function pollLaunchStatus() {
             // Sincronizar reloj central
             const clock = document.getElementById('countdown-clock');
             if (clock) {
-                if (data.estado === 'cuenta_atras') {
+            if (data.estado === 'cuenta_atras') {
                     clock.textContent = '00:00:' + String(data.tiempo_restante).padStart(2, '0');
                     clock.className = 'countdown-value active';
-                } else {
+            } else {
                     clock.textContent = '00:00:10';
                     clock.className = 'countdown-value';
                 }
@@ -196,7 +231,7 @@ function updatePhaseIndicators(estado) {
     p3.className = 'phase-card';
     p4.className = 'phase-card';
 
-    if (estado === 'espera' || estado === 'armando') {
+    if (estado === 'espera' || estado === 'armando' || estado === 'armada') {
         p1.className = 'phase-card active';
         currentPhase = 1;
     } else if (estado === 'cuenta_atras') {
@@ -212,4 +247,4 @@ function updatePhaseIndicators(estado) {
 }
 
 // Polling activo del estado del servidor
-setInterval(pollLaunchStatus, 1000);
+setInterval(pollLaunchStatus, 2000);

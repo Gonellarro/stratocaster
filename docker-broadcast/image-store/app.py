@@ -186,7 +186,21 @@ def handle_mqtt_message(message):
     state['mobile_last_payload'] = payload
     save_launch_state(state)
 
-    if topic != status_topic or payload.get('status') != 'landed':
+    if topic != status_topic:
+        return
+
+    status = payload.get('status')
+    if status == 'recovery_requested':
+        if (state.get('estado') in ('lanzado', 'recuperacion')
+                and payload.get('command_id') == state.get('last_command_id')):
+            state['estado'] = 'recuperacion'
+            state['tiempo_restante'] = 0
+            state['last_event'] = 'El móvil confirmó la Fase 4: baliza y recuperación activas'
+            save_launch_state(state)
+            app.logger.info('Misión %s entra en RECUPERACIÓN por acuse MQTT', state.get('mission_id'))
+        return
+
+    if status != 'landed':
         return
 
     if state.get('estado') not in ('lanzado', 'recuperacion'):
@@ -383,19 +397,15 @@ def change_launch_status():
         if state.get('estado') not in ('lanzado', 'recuperacion'):
             return reject('Solo se puede finalizar una misión lanzada o en recuperación')
         command_id = uuid.uuid4().hex
-        recovery_sent = publish_command('recovery', command_id)
-        state['estado'] = 'finalizada'
-        state['tiempo_restante'] = 0
-        state['timestamp_inicio'] = 0.0
-        state['timestamp_mision'] = 0.0
-        state['preflight_passed'] = False
-        state['video_confirmed'] = False
         state['last_command_id'] = command_id
-        state['last_event'] = (
-            'Misión finalizada; orden de recuperación enviada al móvil'
-            if recovery_sent else
-            'Misión finalizada; no se pudo enviar la orden de recuperación al móvil'
-        )
+        # La Fase 4 no se declara hasta recibir el acuse del móvil. Así la
+        # consola nunca aparenta una recuperación que no haya sido recibida.
+        state['last_event'] = 'Orden de Fase 4 enviada; esperando acuse del móvil'
+        save_launch_state(state)
+        if not publish_command('recovery', command_id):
+            state['last_event'] = 'No se pudo publicar la orden de Fase 4'
+            save_launch_state(state)
+            return jsonify({'error': state['last_event'], 'state': state}), 503
     else:
         return reject('Acción desconocida')
 

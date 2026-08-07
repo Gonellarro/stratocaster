@@ -105,7 +105,7 @@ function triggerBuzzer() {
 }
 
 function finalizeMission() {
-    logMessage('info', 'MISIÓN', 'Finalizando misión y cerrando la recuperación.');
+    logMessage('info', 'MISIÓN', 'Enviando orden de Fase 4 al móvil...');
     fetch('/control_lanzamiento', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -114,7 +114,7 @@ function finalizeMission() {
         if (!response.ok) throw new Error(await response.text());
         const data = await response.json();
         mission.state = data.estado || 'finalizada';
-        logMessage('ok', 'MISIÓN', 'Misión finalizada. Reloj detenido.');
+        logMessage('info', 'MISIÓN', 'Orden enviada. Esperando confirmación de recuperación del móvil.');
         validateChecklist();
     }).catch(error => {
         logMessage('err', 'MISIÓN', 'No se pudo finalizar la misión: ' + error.message);

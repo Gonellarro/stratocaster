@@ -61,6 +61,7 @@ VDO_NINJA_URL="https://vdo.ninja/?push=sonda_stratocaster&webcam&facing=back&aut
 # cadencia moderada para no gastar batería cuando no hay cobertura.
 CONNECTIVITY_CHECK_INTERVAL="${CONNECTIVITY_CHECK_INTERVAL:-15}"
 OFFLINE_TELEMETRY_INTERVAL="${OFFLINE_TELEMETRY_INTERVAL:-60}"
+RECOVERY_DATA_INTERVAL="${RECOVERY_DATA_INTERVAL:-60}"
 
 # Función auxiliar para detener aplicaciones de vídeo en directo
 stop_video_apps() {
@@ -109,6 +110,7 @@ mqtt_connection_available() {
 
 enter_recovery_mode() {
     touch "$LANDING_FLAG" "$RECOVERY_FLAG"
+    rm -f "$VIDEO_FLAG"
     stop_video_apps
     if start_recovery_audio; then
         publish_mqtt "$TOPIC_STATUS" '{"status":"landed","alarm":"starting","source":"command"}' true
@@ -116,21 +118,61 @@ enter_recovery_mode() {
     else
         publish_ack "recovery_alarm_missing_audio"
     fi
-    echo "[RECUPERACIÓN] Sonda en tierra. Baliza activa."
+    echo "[FASE 4] Recuperación activa: vídeo detenido y baliza encendida."
 
     local last_recovery_status=0
     local last_recovery_probe=0
+    local recovery_online=0
     while true; do
+        if [ -f "$ABORT_FLAG" ]; then
+            echo "[FASE 4] Orden de aborto recibida. Volviendo a espera."
+            rm -f "$ABORT_FLAG" "$RECOVERY_FLAG" "$LANDING_FLAG"
+            stop_recovery_audio
+            exec "$0" "$@"
+        fi
+
         local now
         now=$(date +%s)
         if [ $((now - last_recovery_probe)) -ge "$CONNECTIVITY_CHECK_INTERVAL" ]; then
-            if mqtt_connection_available && [ $((now - last_recovery_status)) -ge 60 ]; then
-                publish_mqtt "$TOPIC_STATUS" '{"status":"landed","alarm":"active","source":"recovery"}' true
-                last_recovery_status="$now"
+            if mqtt_connection_available; then
+                recovery_online=1
+            else
+                recovery_online=0
             fi
             last_recovery_probe="$now"
         fi
-        sleep 10
+
+        # La Fase 4 trabaja siempre a baja frecuencia: posición y foto cada
+        # minuto. Sin red se conservan localmente y se reintentan al volver.
+        if [ $((now - last_recovery_status)) -ge "$RECOVERY_DATA_INTERVAL" ]; then
+            local loc_json lat lng alt acc battery_json battery_level battery_temp payload
+            loc_json=$(get_gps_location)
+            lat=$(echo "$loc_json" | jq -r '.latitude // "null"')
+            lng=$(echo "$loc_json" | jq -r '.longitude // "null"')
+            alt=$(echo "$loc_json" | jq -r '.altitude // "null"')
+            acc=$(echo "$loc_json" | jq -r '.accuracy // "null"')
+            battery_json=$(termux-battery-status 2>/dev/null)
+            battery_level=$(echo "$battery_json" | jq -r '.percentage // 0')
+            battery_temp=$(echo "$battery_json" | jq -r '.temperature // 0')
+            payload=$(jq -n \
+                --argjson lat "$lat" --argjson lng "$lng" \
+                --argjson alt "$alt" --argjson accuracy "$acc" \
+                --argjson level "$battery_level" --argjson temp "$battery_temp" \
+                '{status:"recovery_telemetry", lat:$lat, lng:$lng, altitude:$alt, accuracy:$accuracy, level:$level, temp:$temp}')
+
+            if [ "$recovery_online" -eq 1 ]; then
+                publish_mqtt "$TOPIC_TELEMETRY" "$payload"
+                publish_mqtt "$TOPIC_STATUS" "$(jq -n --argjson lat "$lat" --argjson lng "$lng" --argjson alt "$alt" '{status:"landed", alarm:"active", source:"recovery", lat:$lat, lng:$lng, alt:$alt}')"
+                echo "[FASE 4] Posición enviada. Capturando foto de recuperación..."
+            else
+                echo "[FASE 4] Sin red: posición y foto guardadas localmente."
+                echo "[$(date +%Y-%m-%d\ %H:%M:%S)] [RECOVERY_OFFLINE] Lat: $lat, Lng: $lng, Alt: $alt" >> "$OFFLINE_LOG"
+            fi
+
+            capture_recovery_photo "$lat" "$lng" "$alt" "$recovery_online"
+            last_recovery_status="$now"
+        fi
+        sleep 5
     done
 }
 
@@ -186,6 +228,54 @@ get_gps_location() {
     else
         echo "$LOC_JSON"
     fi
+}
+
+# Captura de Fase 4. Siempre conserva una copia local; solo intenta subirla
+# cuando el sondeo MQTT ya ha confirmado que la red está disponible.
+capture_recovery_photo() {
+    local lat="$1"
+    local lng="$2"
+    local alt="$3"
+    local online="$4"
+    local timestamp local_copy description upload_response filename image_url camera_payload
+
+    rm -f "$TARGET_IMG"
+    if ! timeout 20s termux-camera-photo -c 0 "$TARGET_IMG"; then
+        echo "[FASE 4] No se pudo capturar la foto de recuperación."
+        return 1
+    fi
+    if [ ! -s "$TARGET_IMG" ]; then
+        echo "[FASE 4] La cámara no generó una foto de recuperación."
+        return 1
+    fi
+
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local_copy="$PHOTO_DIR/recuperacion_$timestamp.jpg"
+    cp "$TARGET_IMG" "$local_copy"
+    description="Captura de recuperación - Altitud: $alt m"
+
+    if [ "$online" -ne 1 ]; then
+        echo "[FASE 4] Foto guardada localmente: $(basename "$local_copy")"
+        return 0
+    fi
+
+    upload_response=$(curl -s --connect-timeout 10 --max-time 30 \
+        -F "file=@$TARGET_IMG" -F "texto=$description" -F "device_id=$DEVICE_ID" \
+        "$IMAGE_SERVER_URL/upload")
+    if [ $? -ne 0 ] || [ -z "$upload_response" ] || [[ "$upload_response" == *"Error"* ]]; then
+        echo "[FASE 4] No se pudo subir la foto; queda guardada localmente."
+        echo "[$(date +%Y-%m-%d\ %H:%M:%S)] [RECOVERY_UPLOAD_ERR] Lat: $lat, Lng: $lng, Alt: $alt, Archivo: $(basename "$local_copy")" >> "$OFFLINE_LOG"
+        return 1
+    fi
+
+    filename="$upload_response"
+    image_url="$IMAGE_SERVER_URL/images/$filename"
+    camera_payload=$(jq -n \
+        --arg txt "$description" --arg url "$image_url" \
+        --argjson lat "$lat" --argjson lng "$lng" --argjson alt "$alt" \
+        '{texto:$txt, url_imagen:$url, lat:$lat, lng:$lng, alt:$alt, status:"recovery_photo"}')
+    publish_mqtt "$TOPIC_CAMERA" "$camera_payload"
+    echo "[FASE 4] Foto de recuperación enviada: $image_url"
 }
 
 # ------------------------------------------------------------------------------
@@ -274,6 +364,8 @@ handle_command() {
         "recovery")
             echo "[RECUPERACIÓN] Orden recibida: entrando en fase de tierra..."
             touch "$RECOVERY_FLAG"
+            rm -f "$VIDEO_FLAG"
+            stop_video_apps
             publish_ack "recovery_requested" "$command_id"
             ;;
             

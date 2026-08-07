@@ -31,17 +31,16 @@
 
     <section class="mission-grid top-grid">
       <article class="panel preflight-panel">
-        <div class="panel-heading"><div><span class="eyebrow">ANTES DEL DESPEGUE</span><h2>Comprobaciones</h2></div><span id="preflight-summary" class="summary-badge">0/7</span></div>
+        <div class="panel-heading"><div><span class="eyebrow">ANTES DEL DESPEGUE</span><h2>Comprobaciones</h2></div><span id="preflight-summary" class="summary-badge">0/6</span></div>
         <div class="check-grid">
           <div id="chk-movil" class="checklist-item ko"><span class="check-icon">!</span><span>Móvil</span><b id="chk-movil-val">Sin verificar</b></div>
           <div id="chk-gps" class="checklist-item ko"><span class="check-icon">!</span><span>GPS</span><b id="chk-gps-val">Sin verificar</b></div>
           <div id="chk-battery" class="checklist-item ko"><span class="check-icon">!</span><span>Batería</span><b id="chk-battery-val">Sin verificar</b></div>
           <div id="chk-sensors" class="checklist-item ko"><span class="check-icon">!</span><span>Sensor térmico</span><b id="chk-sensors-val">Sin verificar</b></div>
-          <div id="chk-audio" class="checklist-item ko"><span class="check-icon">!</span><span>Audio</span><b id="chk-audio-val">Sin verificar</b></div>
           <div id="chk-foto" class="checklist-item ko"><span class="check-icon">!</span><span>Foto</span><b id="chk-foto-val">Sin verificar</b></div>
           <div id="chk-video" class="checklist-item ko"><span class="check-icon">!</span><span>Vídeo</span><b id="chk-video-val">Sin verificar</b></div>
         </div>
-        <div class="check-actions"><button id="btn-test-systems" class="btn primary" onclick="runSelfTest()">PROBAR SISTEMAS</button><button id="btn-audio-confirm" class="btn secondary" onclick="confirmAudioHeard()" disabled>HE OÍDO EL AUDIO</button></div>
+        <div class="check-actions"><button id="btn-test-systems" class="btn primary" onclick="runSelfTest()">PROBAR SISTEMAS</button></div>
       </article>
 
       <article class="panel mission-panel">
@@ -86,13 +85,13 @@
   <div id="gps-debug-modal" class="modal" style="display:none"><div class="modal-content"><button onclick="closeGpsModal()">Cerrar</button><pre id="gps-modal-raw-json"></pre></div></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="{{ url_for('static', filename='js/state.js', v='20260807-14') }}"></script>
-  <script src="{{ url_for('static', filename='js/ui.js', v='20260807-14') }}"></script>
-  <script src="{{ url_for('static', filename='js/map.js', v='20260807-14') }}"></script>
-  <script src="{{ url_for('static', filename='js/telemetry.js', v='20260807-14') }}"></script>
-  <script src="{{ url_for('static', filename='js/checklist.js', v='20260807-14') }}"></script>
-  <script src="{{ url_for('static', filename='js/launch.js', v='20260807-14') }}"></script>
-  <script src="{{ url_for('static', filename='js/fotos.js', v='20260807-14') }}"></script>
-  <script src="{{ url_for('static', filename='js/main.js', v='20260807-14') }}"></script>
+  <script src="{{ url_for('static', filename='js/state.js', v='20260807-15') }}"></script>
+  <script src="{{ url_for('static', filename='js/ui.js', v='20260807-15') }}"></script>
+  <script src="{{ url_for('static', filename='js/map.js', v='20260807-15') }}"></script>
+  <script src="{{ url_for('static', filename='js/telemetry.js', v='20260807-15') }}"></script>
+  <script src="{{ url_for('static', filename='js/checklist.js', v='20260807-15') }}"></script>
+  <script src="{{ url_for('static', filename='js/launch.js', v='20260807-15') }}"></script>
+  <script src="{{ url_for('static', filename='js/fotos.js', v='20260807-15') }}"></script>
+  <script src="{{ url_for('static', filename='js/main.js', v='20260807-15') }}"></script>
 </body>
 </html>

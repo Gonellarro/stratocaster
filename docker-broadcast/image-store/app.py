@@ -299,7 +299,7 @@ def device_command():
     device_id = data.get('device_id', DEVICE_ID)
     command = data.get('cmd', '')
     allowed = {
-        'get_status', 'init_gps', 'test_audio', 'test_video_on',
+        'get_status', 'init_gps', 'test_video_on',
         'test_video_off', 'test_photo', 'play_audio', 'stop_audio',
     }
     if device_id != DEVICE_ID or command not in allowed:

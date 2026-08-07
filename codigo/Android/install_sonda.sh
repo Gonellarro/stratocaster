@@ -18,13 +18,13 @@ pkg install -y "${PACKAGES[@]}"
 
 echo "[INFO] Preparando almacenamiento compartido..."
 termux-setup-storage || true
-mkdir -p "$HOME/sonidos"
+mkdir -p "$HOME/storage/pictures/Sonda" "$HOME/storage/music/Sonda"
 
 echo
 echo "[ATENCIÓN] Debes instalar también la aplicación Android 'Termux:API'"
 echo "           desde la misma fuente que Termux (preferiblemente F-Droid)."
 echo "           Después, concede permisos de ubicación, cámara y audio."
-echo "           Copia ~/sonidos/alarma_recuperacion.mp3: se usará para la"
-echo "           prueba de audio y como baliza de recuperación."
+echo "           Copia ~/storage/music/Sonda/alarma.mp3: se usará como"
+echo "           baliza de recuperación."
 echo
 echo "[OK] Instalación de paquetes completada."

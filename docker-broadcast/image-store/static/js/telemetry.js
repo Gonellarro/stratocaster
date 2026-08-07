@@ -191,20 +191,10 @@ function handleSondaEvent(data) {
             updateChecklistUI('chk-gps', 'ko', 'Fallo Fijación');
         }
         logMessage('err', 'GPS', 'Fallo al fijar señal GPS.');
-    } else if (data.status === 'audio_command_completed' || data.status === 'audio_ok') {
-        if (isSequenceRunning) {
-            checks.audio = true;
-            updateChecklistUI('chk-audio', 'warn', 'Orden ejecutada; confirmar oído');
-        }
-        logMessage('ok', 'AUDIO', 'Orden de audio ejecutada; falta confirmación humana.');
-        const audioBtn = document.getElementById('btn-audio-confirm');
-        if (audioBtn && isSequenceRunning) audioBtn.disabled = false;
-    } else if (data.status === 'audio_command_failed') {
-        if (isSequenceRunning) {
-            checks.audio = false;
-            updateChecklistUI('chk-audio', 'ko', 'No se pudo reproducir');
-        }
-        logMessage('err', 'AUDIO', 'El móvil no pudo ejecutar la orden de audio.');
+    } else if (data.status === 'recovery_alarm_started') {
+        logMessage('ok', 'BALIZA', 'Alarma de recuperación activada en el móvil.');
+    } else if (data.status === 'recovery_alarm_missing_audio' || data.status === 'audio_rejected_missing_file' || data.status === 'audio_playback_failed') {
+        logMessage('err', 'BALIZA', 'No se pudo activar la alarma MP3 de recuperación.');
     } else if (data.status === 'video_streaming_on') {
         streamActive = true;
         videoPreviewReady = false;

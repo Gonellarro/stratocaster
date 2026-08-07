@@ -36,14 +36,6 @@ const testSteps = [
         retries: 1
     },
     {
-        id: 'chk-audio',
-        name: 'Altavoz (TTS)',
-        run: () => { sendCommand('test_audio'); },
-        check: () => checks.audio,
-        timeout: 20000,
-        retries: 2
-    },
-    {
         id: 'chk-foto',
         name: 'Cámara (Foto)',
         run: () => { sendCommand('test_photo'); },
@@ -67,9 +59,6 @@ function runSelfTest() {
     checks.battery = false;
     checks.sensors = false;
     checks.gps = false;
-    checks.audio = false;
-    checks.audio_confirmed = false;
-    audioConfirmed = false;
     preflightPassed = false;
     videoConfirmed = false;
     checklistPassed = false;
@@ -94,17 +83,13 @@ function runSelfTest() {
 function executeCurrentStep() {
     if (currentStepIndex >= testSteps.length) {
         isSequenceRunning = false;
-        // La prueba técnica no se convierte en autorización hasta que el
-        // operador confirma el audio y el enlace LoRa tiene una muestra nueva.
         const btn = document.getElementById('btn-test-systems');
         if (btn) {
             btn.textContent = 'SISTEMAS COMPROBADOS';
             btn.className = 'btn primary';
             btn.disabled = false;
         }
-        logMessage('ok', 'TEST', 'Pruebas técnicas completadas; falta confirmar que el audio se ha oído.');
-        const audioBtn = document.getElementById('btn-audio-confirm');
-        if (audioBtn) audioBtn.disabled = !checks.audio;
+        logMessage('ok', 'TEST', 'Pruebas técnicas completadas.');
         tryApprovePreflight();
         validateChecklist();
         return;
@@ -220,14 +205,12 @@ function stopSelfTestOnFailure() {
         btn.className = 'btn primary';
         btn.disabled = false;
     }
-    const audioBtn = document.getElementById('btn-audio-confirm');
-    if (audioBtn) audioBtn.disabled = true;
     logMessage('err', 'TEST', 'La comprobación no se completó. Se detienen las comprobaciones restantes.');
     validateChecklist();
 }
 
 function resetChecklistUI() {
-    const ids = ['chk-movil', 'chk-gps', 'chk-battery', 'chk-sensors', 'chk-audio', 'chk-foto', 'chk-video'];
+    const ids = ['chk-movil', 'chk-gps', 'chk-battery', 'chk-sensors', 'chk-foto', 'chk-video'];
     ids.forEach(id => {
         const item = document.getElementById(id);
         if (item) item.className = 'checklist-item ko';
@@ -244,9 +227,6 @@ function resetChecklistUI() {
     checks.battery = false;
     checks.sensors = false;
     checks.gps = false;
-    checks.audio = false;
-    checks.audio_confirmed = false;
-    audioConfirmed = false;
     preflightPassed = false;
     videoConfirmed = false;
     checklistPassed = false;
@@ -299,24 +279,9 @@ setInterval(() => {
     validateChecklist();
 }, 4000);
 
-function confirmAudioHeard() {
-    if (!checks.audio) return;
-    audioConfirmed = true;
-    checks.audio_confirmed = true;
-    updateChecklistUI('chk-audio', 'ok', 'Oído y confirmado');
-    const button = document.getElementById('btn-audio-confirm');
-    if (button) {
-        button.disabled = true;
-        button.textContent = '🔊 AUDIO CONFIRMADO';
-    }
-    logMessage('ok', 'AUDIO', 'El operador ha confirmado que el audio se oye físicamente.');
-    tryApprovePreflight();
-    validateChecklist();
-}
-
 function tryApprovePreflight() {
     if (!isSequenceRunning && checks.movil && checks.gps && checks.battery &&
-        checks.sensors && checks.audio && checks.audio_confirmed && checks.camera_foto) {
+        checks.sensors && checks.camera_foto) {
         preflightPassed = true;
         checklistPassed = true;
         fetch('/control_lanzamiento', {

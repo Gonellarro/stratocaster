@@ -7,24 +7,28 @@
 # Fase 2: Bucle Autónomo de Transmisión Directa (Captura y GPS)
 # ==============================================================================
 
-# RUTAS DE CAPTURA Y TELEMETRÍA
-TARGET_IMG="$HOME/imagenes/foto.jpg"
-OFFLINE_LOG="$HOME/imagenes/sonda_offline.log"
-ARMED_FLAG="$HOME/imagenes/sonda.armed"
-LAUNCH_FLAG="$HOME/imagenes/sonda.launch"
-ABORT_FLAG="$HOME/imagenes/sonda.abort"
-VIDEO_FLAG="$HOME/imagenes/sonda.video"
-LANDING_FLAG="$HOME/imagenes/sonda.landed"
 # Cargar variables de entorno y credenciales privadas desde 'sonda.env' si existe
 CONFIG_FILE="${SONDA_CONFIG_FILE:-$(dirname "$0")/sonda.env}"
 if [ -f "$CONFIG_FILE" ]; then
     source "$CONFIG_FILE"
 fi
 
-# Audio determinista: no se utiliza TTS. Por defecto la prueba reproduce la
-# misma alarma MP3 que se empleará para localizar la sonda tras el aterrizaje.
-ALARM_AUDIO="${ALARM_AUDIO:-$HOME/sonidos/alarma_recuperacion.mp3}"
-AUDIO_TEST_FILE="${AUDIO_TEST_FILE:-$ALARM_AUDIO}"
+# Rutas públicas para ficheros que el operador necesita consultar o copiar.
+PHOTO_DIR="${PHOTO_DIR:-$HOME/storage/pictures/Sonda}"
+AUDIO_DIR="${AUDIO_DIR:-$HOME/storage/music/Sonda}"
+TARGET_IMG="$PHOTO_DIR/foto.jpg"
+
+# Estado interno: permanece privado en Termux, fuera del almacenamiento público.
+STATE_DIR="$HOME/.sonda"
+OFFLINE_LOG="$STATE_DIR/sonda_offline.log"
+ARMED_FLAG="$STATE_DIR/sonda.armed"
+LAUNCH_FLAG="$STATE_DIR/sonda.launch"
+ABORT_FLAG="$STATE_DIR/sonda.abort"
+VIDEO_FLAG="$STATE_DIR/sonda.video"
+LANDING_FLAG="$STATE_DIR/sonda.landed"
+
+# Único audio operativo por ahora: baliza de recuperación.
+ALARM_AUDIO="${ALARM_AUDIO:-$AUDIO_DIR/alarma.mp3}"
 
 # Definir valores predeterminados e identificador de dispositivo
 if [ -z "$DEVICE_ID" ]; then
@@ -39,7 +43,7 @@ TOPIC_COMMAND="sonda/mobile/$DEVICE_ID/command"
 
 
 # Asegurar la existencia de directorios de salida
-mkdir -p "$HOME/imagenes" "$HOME/sonidos"
+mkdir -p "$PHOTO_DIR" "$AUDIO_DIR" "$STATE_DIR"
 
 # Verificar dependencias críticas de Termux y herramientas
 for cmd in termux-camera-photo termux-wake-lock termux-wake-unlock mosquitto_pub mosquitto_sub jq termux-battery-status termux-location termux-media-player; do
@@ -73,17 +77,6 @@ start_recovery_audio() {
     ) &
 }
 
-play_audio_once() {
-    local audio_file="$1"
-    if [ ! -s "$audio_file" ]; then
-        echo "[AUDIO] No existe o está vacío: $audio_file" >&2
-        return 1
-    fi
-    stop_recovery_audio
-    echo "[AUDIO] Reproduciendo: $audio_file"
-    termux-media-player play "$audio_file" &>/dev/null
-}
-
 # Función auxiliar para publicar mensajes MQTT
 publish_mqtt() {
     local topic="$1"
@@ -112,7 +105,7 @@ publish_ack() {
 termux-wake-lock
 
 # Definir ruta para el log de posicionamiento pasivo continuo
-GPS_LOG="$HOME/imagenes/gps_updates.json"
+GPS_LOG="$STATE_DIR/gps_updates.json"
 rm -f "$GPS_LOG"
 
 # Iniciar la suscripción pasiva a actualizaciones de ubicación en segundo plano
@@ -213,24 +206,14 @@ handle_command() {
             fi
             ;;
             
-        "test_audio")
-            publish_mqtt "$TOPIC_STATUS" '{"status": "audio_playing"}'
-            if play_audio_once "$AUDIO_TEST_FILE"; then
-                publish_ack "audio_command_completed" "$command_id"
-            else
-                publish_ack "audio_command_failed" "$command_id"
-            fi
-            ;;
-
         "play_audio")
             case "$audio_id" in
                 recovery_alarm) AUDIO_FILE="$ALARM_AUDIO" ;;
-                message_1) AUDIO_FILE="$HOME/sonidos/mensaje_1.mp3" ;;
                 *) publish_ack "audio_rejected_unknown" "$command_id"; return ;;
             esac
-            if [ -f "$AUDIO_FILE" ]; then
-                if play_audio_once "$AUDIO_FILE"; then
-                    publish_ack "audio_playing" "$command_id"
+            if [ -s "$AUDIO_FILE" ]; then
+                if start_recovery_audio; then
+                    publish_ack "recovery_alarm_started" "$command_id"
                 else
                     publish_ack "audio_playback_failed" "$command_id"
                 fi
@@ -477,7 +460,7 @@ sleep 2
 # ==============================================================================
 echo "====================================================="
 echo "  [FASE 2] Iniciando bucle de captura autónoma inteligente..."
-echo "  Destino de capturas locales: ~/imagenes/"
+echo "  Destino de capturas locales: $PHOTO_DIR"
 echo "  Telemetría cada 5s | Fotos cada 60s (si hay cobertura)"
 echo "====================================================="
 
@@ -610,7 +593,7 @@ while true; do
         if [ -f "$TARGET_IMG" ]; then
             # Guardar copia física con timestamp en el almacenamiento local del teléfono
             TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-            LOCAL_COPY="$HOME/imagenes/sonda_$TIMESTAMP.jpg"
+            LOCAL_COPY="$PHOTO_DIR/sonda_$TIMESTAMP.jpg"
             cp "$TARGET_IMG" "$LOCAL_COPY"
 
             TEXTO_DETECTADO="Captura autónoma - Altitud: $ALT m"

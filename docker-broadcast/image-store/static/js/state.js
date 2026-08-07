@@ -12,7 +12,6 @@ let videoConfirmed = false;
 let videoPreviewReady = false;
 let videoPreviewTimer = null;
 let videoPreviewInProgress = false;
-let audioConfirmed = false;
 let lastCoverageState = 'unknown';
 let loraTestStartedAt = 0;
 let mobileOnline = false;
@@ -26,9 +25,7 @@ let checks = {
     camera_video: false,
     battery: false,
     sensors: false,
-    gps: false,
-    audio: false,
-    audio_confirmed: false
+    gps: false
 };
 
 // Secuenciador de pruebas pre-vuelo

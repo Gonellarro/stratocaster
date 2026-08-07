@@ -52,17 +52,7 @@ function startVideoPreview() {
         videoPreviewInProgress = false;
         if (confirm) confirm.disabled = false;
         logMessage('ok', 'VÍDEO', 'Previsualización completada. Confirma la imagen en OBS.');
-        announceVideoReady();
     }, 5000);
-}
-
-function announceVideoReady() {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const announcement = new SpeechSynthesisUtterance('La prueba de vídeo ha terminado. Confirma la imagen en OBS.');
-    announcement.lang = 'es-ES';
-    announcement.rate = 1;
-    window.speechSynthesis.speak(announcement);
 }
 
 function confirmVideo() {

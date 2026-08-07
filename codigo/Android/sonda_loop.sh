@@ -485,21 +485,6 @@ while true; do
         exec "$0" "$@"
     fi
 
-    echo "[$(date +%T)] 📍 Midiendo altitud de vuelo..."
-    
-    LOC_JSON=$(get_gps_location)
-    LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
-    LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')
-    ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
-    ACC=$(echo "$LOC_JSON" | jq -r '.accuracy // "null"')
-    
-    # Preparar telemetría aunque todavía no exista fix GPS.
-    GPS_PAYLOAD=$(jq -n \
-      --argjson lat "$LAT" \
-      --argjson lng "$LNG" \
-      --argjson alt "$ALT" \
-      --argjson acc "$ACC" \
-      '{lat: $lat, lng: $lng, altitude: $alt, accuracy: $acc}')
     NOW=$(date +%s)
     if [ $((NOW - LAST_CONNECTIVITY_CHECK_AT)) -ge "$CONNECTIVITY_CHECK_INTERVAL" ]; then
         if mqtt_connection_available; then
@@ -510,6 +495,35 @@ while true; do
         LAST_CONNECTIVITY_CHECK_AT="$NOW"
     fi
 
+    # Sin cobertura no se despierta el GPS cada 5 s: se mantiene el sondeo de
+    # red cada 15 s, pero la medición y el intento MQTT se reducen a 60 s.
+    if [ "$COBERTURA" -eq 0 ] && [ $((NOW - LAST_OFFLINE_TELEMETRY_AT)) -lt "$OFFLINE_TELEMETRY_INTERVAL" ]; then
+        CURRENT_TIME="$NOW"
+        ELAPSED=$((CURRENT_TIME - START_TIME))
+        if [ "$ELAPSED" -gt "$TIMEOUT_SAFETY" ]; then
+            echo "[⚠️ SEGURIDAD] Límite de tiempo de vídeo agotado ($TIMEOUT_SAFETY s). Entrando en Fase Autónoma..."
+            break
+        fi
+        sleep 5
+        continue
+    fi
+
+    echo "[$(date +%T)] 📍 Midiendo altitud de vuelo..."
+
+    LOC_JSON=$(get_gps_location)
+    LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
+    LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')
+    ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
+    ACC=$(echo "$LOC_JSON" | jq -r '.accuracy // "null"')
+
+    # Preparar telemetría aunque todavía no exista fix GPS.
+    GPS_PAYLOAD=$(jq -n \
+      --argjson lat "$LAT" \
+      --argjson lng "$LNG" \
+      --argjson alt "$ALT" \
+      --argjson acc "$ACC" \
+      '{lat: $lat, lng: $lng, altitude: $alt, accuracy: $acc}')
+
     if [ "$COBERTURA" -eq 1 ]; then
         # Con red: telemetría normal cada ciclo (5 s) y heartbeat cada 15 s.
         publish_mqtt "$TOPIC_TELEMETRY" "$GPS_PAYLOAD"
@@ -518,13 +532,11 @@ while true; do
             LAST_FLIGHT_HEARTBEAT_AT="$NOW"
         fi
         echo "[📡 TELEMETRÍA] Enviada: Alt: $ALT m, Acc: $ACC m"
-    elif [ $((NOW - LAST_OFFLINE_TELEMETRY_AT)) -ge "$OFFLINE_TELEMETRY_INTERVAL" ]; then
+    else
         # Sin red: solo un intento ligero por minuto; nunca bloquea el bucle.
         publish_mqtt "$TOPIC_TELEMETRY" "$GPS_PAYLOAD" true
         LAST_OFFLINE_TELEMETRY_AT="$NOW"
         echo "[📡 TELEMETRÍA] Sin red: intento reducido (cada ${OFFLINE_TELEMETRY_INTERVAL}s)."
-    else
-        echo "[📡 TELEMETRÍA] Sin red: envío aplazado para ahorrar batería."
     fi
     
     ALT_INT=${ALT%.*}

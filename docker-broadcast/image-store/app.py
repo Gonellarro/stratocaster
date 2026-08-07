@@ -7,6 +7,7 @@ import tempfile
 from functools import wraps
 from flask import Flask, request, send_from_directory, render_template, jsonify, session, redirect, url_for
 from werkzeug.utils import secure_filename
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 try:
     import paho.mqtt.publish as mqtt_publish
@@ -168,6 +169,20 @@ def publish_command(command, command_id):
         app.logger.error('Error publicando comando %s: %s', command, exc)
         return False
 
+def normalize_photo_orientation(filepath):
+    """Corrige EXIF y fuerza las capturas de la sonda a formato horizontal."""
+    try:
+        with Image.open(filepath) as source:
+            image_format = source.format or 'JPEG'
+            image = ImageOps.exif_transpose(source)
+            if image.height > image.width:
+                image = image.rotate(-90, expand=True)
+            if image_format == 'JPEG' and image.mode not in ('RGB', 'L'):
+                image = image.convert('RGB')
+            image.save(filepath, format=image_format)
+    except (UnidentifiedImageError, OSError) as exc:
+        app.logger.warning('No se pudo normalizar la orientación de %s: %s', filepath, exc)
+
 def update_countdown_state():
     """Calcula dinámicamente el tiempo restante de la cuenta atrás."""
     state = load_launch_state()
@@ -248,6 +263,12 @@ def change_launch_status():
         state['timestamp_mision'] = now
         state['tiempo_restante'] = COUNTDOWN_SECONDS
         state['last_event'] = 'Cuenta atrás iniciada'
+    elif action == 'recuperacion':
+        if state.get('estado') not in ('lanzado', 'recuperacion'):
+            return reject('La recuperación solo puede iniciarse tras el lanzamiento')
+        state['estado'] = 'recuperacion'
+        state['tiempo_restante'] = 0
+        state['last_event'] = 'Aterrizaje detectado; baliza de recuperación activa'
     elif action == 'abortar':
         command_id = uuid.uuid4().hex
         publish_command('abort', command_id)
@@ -326,6 +347,7 @@ def upload_file():
         unique_name = f"{uuid.uuid4().hex}{ext}"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_name)
         file.save(filepath)
+        normalize_photo_orientation(filepath)
         
         texto = request.form.get('texto', '')
         device_id = request.form.get('device_id', 'movil_sonda_1')

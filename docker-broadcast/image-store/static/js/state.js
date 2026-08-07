@@ -16,6 +16,7 @@ let lastCoverageState = 'unknown';
 let loraTestStartedAt = 0;
 let mobileOnline = false;
 let loraOnline = false;
+let landingTransitionRequested = false;
 
 // Checklist local status variables (Todas en false hasta ejecutar comprobación explícita)
 let checks = {

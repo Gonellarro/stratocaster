@@ -477,6 +477,7 @@ DESCENT_DETECTED=0
 LAST_ALTITUDE=""
 LOW_MOTION_CYCLES=0
 LANDING_STABLE_CYCLES=36
+LAST_LANDING_STATUS_AT=0
 
 while true; do
     if [ -f "$ABORT_FLAG" ]; then
@@ -538,6 +539,15 @@ while true; do
 
     # 2. Gestión dinámica de conectividad en vuelo
     if [ "$COBERTURA" -eq 1 ]; then
+        # Si aterrizó sin cobertura, repetir periódicamente el evento hasta
+        # que la consola pueda pasar a recuperación.
+        if [ -f "$LANDING_FLAG" ]; then
+            NOW=$(date +%s)
+            if [ $((NOW - LAST_LANDING_STATUS_AT)) -ge 60 ]; then
+                publish_mqtt "$TOPIC_STATUS" "$(jq -n --argjson alt "$ALT_NUM" '{status: "landed", alt: $alt, alarm: "active"}')" true
+                LAST_LANDING_STATUS_AT="$NOW"
+            fi
+        fi
         # Con cobertura: Si el vídeo estaba apagado, lo encendemos para el directo
         if [ "$VIDEO_RUNNING" -eq 0 ]; then
             echo "[🛰️ NET] Conexión recuperada. Reanudando vídeo en directo..."

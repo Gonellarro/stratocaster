@@ -3,3 +3,23 @@
 @media(max-width:1000px){.top-grid,.media-grid,.bottom-grid{grid-template-columns:1fr}.phase-strip{grid-template-columns:repeat(2,1fr)}.header-metric{display:none}}
 @media(max-width:600px){.mission-header{height:auto;min-height:64px;gap:10px;padding:10px 14px}.header-state{min-width:auto}.mission-shell{padding:12px}.phase-strip{gap:6px}.phase-card{padding:9px}.phase-card strong{font-size:11px}.phase-card span{font-size:10px}.panel{padding:13px}.check-grid{grid-template-columns:1fr}.check-actions{flex-direction:column}.telemetry-grid{grid-template-columns:repeat(2,1fr)}.telemetry-value.wide{grid-column:span 2}#map-container{height:300px}.brand strong{font-size:13px}}
 .camera-viewer{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;height:100%;color:#b9c5ce}.camera-viewer.video-mode{display:none}.camera-viewer img{display:block;max-width:100%;max-height:210px;object-fit:contain}.video-frame iframe[src=""]{display:none}
+
+/* Orden operativo de la consola: checks + vídeo, después lanzamiento + telemetría. */
+@media(min-width:1001px){
+  .mission-shell{display:grid;grid-template-columns:1.15fr .85fr;gap:16px}
+  .phase-strip,.top-grid,.media-grid,.bottom-grid{grid-column:1/-1}
+  .top-grid,.media-grid,.bottom-grid{display:contents}
+  .phase-strip{grid-row:1}
+  .preflight-panel{grid-column:1;grid-row:2}
+  .video-panel{grid-column:2;grid-row:2}
+  .mission-panel{grid-column:1;grid-row:3}
+  .telemetry-panel{grid-column:2;grid-row:3}
+  .map-panel{grid-column:1;grid-row:4}
+  .links-panel{grid-column:2;grid-row:4}
+  .log-panel{grid-column:1/-1;grid-row:5;margin-top:0}
+}
+@media(max-width:1000px){
+  .mission-shell{display:flex;flex-direction:column}
+  .top-grid,.media-grid,.bottom-grid{display:contents}
+  .preflight-panel{order:1}.video-panel{order:2}.mission-panel{order:3}.telemetry-panel{order:4}.map-panel{order:5}.links-panel{order:6}.log-panel{order:7}
+}

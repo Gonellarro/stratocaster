@@ -101,9 +101,11 @@ publish_mqtt() {
 # siendo válidas. El probe no transporta telemetría ni se guarda en Flask.
 mqtt_connection_available() {
     nc -z -w 2 "$MQTT_HOST" "$MQTT_PORT" &>/dev/null || return 1
+    # No usar -W: la versión de mosquitto_pub distribuida por Termux no
+    # implementa esa opción y devolvía fallo aunque el broker estuviera OK.
     mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" \
         -u "$MQTT_USER" -P "$MQTT_PASS" \
-        -t "$TOPIC_PROBE" -n -q 0 -W 3 &>/dev/null
+        -t "$TOPIC_PROBE" -n -q 0 &>/dev/null
 }
 
 enter_recovery_mode() {

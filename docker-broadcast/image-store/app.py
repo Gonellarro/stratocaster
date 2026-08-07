@@ -33,7 +33,7 @@ MQTT_PASS = os.environ.get('MQTT_COMMAND_PASSWORD', os.environ.get('TELEGRAF_MQT
 MQTT_VIEW_USER = os.environ.get('MQTT_VIEW_USER', os.environ.get('TELEGRAF_MQTT_USER', ''))
 MQTT_VIEW_PASS = os.environ.get('MQTT_VIEW_PASSWORD', os.environ.get('TELEGRAF_MQTT_PASSWORD', ''))
 DEVICE_ID = os.environ.get('SONDA_DEVICE_ID', 'movil_sonda_1')
-VDO_NINJA_VIEW_URL = os.environ.get('VDO_NINJA_VIEW_URL', 'https://vdo.ninja/?view=9GJw2rs')
+VDO_NINJA_VIEW_URL = os.environ.get('VDO_NINJA_VIEW_URL', 'https://vdo.ninja/?view=sonda_stratocaster')
 
 # Estado global del lanzamiento (en memoria)
 LAUNCH_STATE = {

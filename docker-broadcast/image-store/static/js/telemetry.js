@@ -134,15 +134,15 @@ function handleCameraEvent(data) {
     }
     const streamFrame = document.getElementById('video-stream');
     if (streamFrame && !streamFrame.getAttribute('src')) {
-        streamFrame.src = (window.CONFIG && window.CONFIG.vdoViewUrl) || 'https://vdo.ninja/?view=9GJw2rs';
+        streamFrame.src = (window.CONFIG && window.CONFIG.vdoViewUrl) || 'https://vdo.ninja/?view=sonda_stratocaster';
     }
     switchCameraTab('foto');
     
     const photoTimeEl = document.getElementById('photo-time');
     if (photoTimeEl) {
-        photoTimeEl.textContent = 'Última foto IA (' + new Date().toLocaleTimeString() + '): ' + data.texto;
+        photoTimeEl.textContent = 'Última foto (' + new Date().toLocaleTimeString() + '): ' + (data.texto || 'Captura de verificación de cámara (OK)');
     }
-    logMessage('ok', 'CÁMARA', 'Nueva foto procesada por IA: "' + data.texto + '"');
+    logMessage('ok', 'CÁMARA', 'Nueva foto recibida: "' + (data.texto || 'Captura de verificación de cámara (OK)') + '"');
     
     if (data.lat !== undefined && data.lat !== null && data.lat !== 'null' && data.lat !== 0) {
         updateMapCoordinates('movil', data.lat, data.lng);
@@ -150,7 +150,7 @@ function handleCameraEvent(data) {
     
     if (isSequenceRunning) {
         checks.camera_foto = true;
-        updateChecklistUI('chk-foto', true, 'Foto & IA Confirmada');
+        updateChecklistUI('chk-foto', true, 'Foto confirmada');
     }
 }
 
@@ -159,8 +159,8 @@ function handleSondaEvent(data) {
         mobileOnline = true;
         updateLinkState('movil', true);
         if (isSequenceRunning) {
-            checks.movil = true;
-            updateChecklistUI('chk-movil', 'ok', 'Orden recibida');
+            // status_received solo es un acuse de recepción de la orden. El
+            // móvil queda confirmado con el diagnóstico completo.
         }
         logMessage('ok', 'MÓVIL', 'El móvil ha recibido la orden de diagnóstico.');
     } else if (data.status === 'gps_initializing') {
@@ -236,7 +236,7 @@ function handleSondaEvent(data) {
         switchCameraTab('foto');
         logMessage('info', 'VÍDEO', 'Transmisión de vídeo en directo detenida.');
     } else if (data.status === 'camera_testing') {
-        logMessage('info', 'CÁMARA', 'Móvil procesando test de foto local con la IA...');
+        logMessage('info', 'CÁMARA', 'Móvil procesando la captura de verificación...');
     } else if (data.status === 'camera_error' || data.status === 'camera_capture_failed') {
         if (isSequenceRunning) {
             checks.camera_foto = false;

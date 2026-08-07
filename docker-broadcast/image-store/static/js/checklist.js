@@ -5,7 +5,9 @@ const testSteps = [
         name: 'Móvil (Android)',
         run: () => { sendCommand('get_status'); },
         check: () => checks.movil,
-        timeout: 4000,
+        // El acuse status_received solo confirma que llegó la orden. El paso
+        // termina cuando llega el diagnóstico completo (batería, sensor y GPS).
+        timeout: 30000,
         retries: 1,
         critical: true
     },
@@ -14,7 +16,7 @@ const testSteps = [
         name: 'Batería Móvil',
         run: () => {},
         check: () => checks.battery,
-        timeout: 8000,
+        timeout: 30000,
         retries: 1
     },
     {
@@ -22,7 +24,7 @@ const testSteps = [
         name: 'Sensores Sonda',
         run: () => {},
         check: () => checks.sensors,
-        timeout: 8000,
+        timeout: 30000,
         retries: 1
     },
     {
@@ -30,7 +32,7 @@ const testSteps = [
         name: 'GPS Sonda',
         run: () => { sendCommand('init_gps'); },
         check: () => checks.gps,
-        timeout: 15000,
+        timeout: 30000,
         retries: 1
     },
     {
@@ -38,15 +40,15 @@ const testSteps = [
         name: 'Altavoz (TTS)',
         run: () => { sendCommand('test_audio'); },
         check: () => checks.audio,
-        timeout: 7000,
+        timeout: 20000,
         retries: 2
     },
     {
         id: 'chk-foto',
-        name: 'Cámara (Foto e IA)',
+        name: 'Cámara (Foto)',
         run: () => { sendCommand('test_photo'); },
         check: () => checks.camera_foto,
-        timeout: 20000,
+        timeout: 30000,
         retries: 1
     }
 ];
@@ -196,19 +198,17 @@ function handleStepTimeout() {
         updateChecklistUI(step.id, 'ko', 'ERROR (KO)');
 
         if (step.critical) {
-            stopSelfTestOnMobileFailure();
+            stopSelfTestOnFailure();
             return;
         }
         
-        setTimeout(() => {
-            currentStepIndex++;
-            currentRetry = 0;
-            executeCurrentStep();
-        }, 500);
+        // Un check sin respuesta no se puede dar por bueno ni saltar. Se
+        // detiene la secuencia para que el operador pueda reintentarla.
+        stopSelfTestOnFailure();
     }
 }
 
-function stopSelfTestOnMobileFailure() {
+function stopSelfTestOnFailure() {
     clearTimeout(stepTimeoutTimer);
     isSequenceRunning = false;
     stepAdvancing = false;
@@ -222,7 +222,7 @@ function stopSelfTestOnMobileFailure() {
     }
     const audioBtn = document.getElementById('btn-audio-confirm');
     if (audioBtn) audioBtn.disabled = true;
-    logMessage('err', 'TEST', 'Móvil sin respuesta. Se detienen las comprobaciones restantes.');
+    logMessage('err', 'TEST', 'La comprobación no se completó. Se detienen las comprobaciones restantes.');
     validateChecklist();
 }
 

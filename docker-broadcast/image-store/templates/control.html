@@ -17,6 +17,7 @@
     <div class="header-state"><span>ESTADO</span><b id="sys-status-large" class="header-pill waiting">ESPERA</b></div>
     <div class="header-metric"><span>MISIÓN</span><b id="mission-id-card">--</b></div>
     <div class="header-metric"><span>TIEMPO</span><b id="mission-time">00:00:00</b></div>
+    <button id="btn-new-mission" class="btn primary" onclick="startNewMission()" hidden>NUEVA MISIÓN</button>
     <a class="logout" href="{{ url_for('logout') }}">Salir</a>
   </header>
 
@@ -75,7 +76,7 @@
 
     <section class="mission-grid bottom-grid">
       <article class="panel map-panel"><div class="panel-heading"><div><span class="eyebrow">POSICIÓN</span><h2>Mapa de misión</h2></div><div class="map-legend"><span><i class="legend-dot mobile-dot"></i>Sonda</span><span><i class="legend-dot lora-dot"></i>LoRa</span></div></div><div id="map-container"></div></article>
-      <article class="panel links-panel"><div class="panel-heading"><div><span class="eyebrow">ENLACES</span><h2>Estado de comunicaciones</h2></div></div><div class="link-row"><span>Móvil</span><b id="link-movil" class="link-badge disconnected">Desconectado</b></div><div class="link-row"><span>LoRa</span><b id="link-lora" class="link-badge disconnected">Desconectado</b></div><div class="link-row"><span>Vídeo / OBS</span><b id="link-video" class="link-badge disconnected">Pendiente</b></div><div class="recovery-actions"><button class="btn warning" onclick="triggerBuzzer()">ACTIVAR BALIZA SONORA</button><button id="btn-finalize-mission" class="btn secondary" onclick="finalizeMission()">FINALIZAR MISIÓN</button><button id="btn-new-mission" class="btn primary" onclick="startNewMission()" hidden>NUEVA MISIÓN</button></div></article>
+      <article class="panel links-panel"><div class="panel-heading"><div><span class="eyebrow">ENLACES</span><h2>Estado de comunicaciones</h2></div></div><div class="link-row"><span>Móvil</span><b id="link-movil" class="link-badge disconnected">Desconectado</b></div><div class="link-row"><span>LoRa</span><b id="link-lora" class="link-badge disconnected">Desconectado</b></div><div class="link-row"><span>Vídeo / OBS</span><b id="link-video" class="link-badge disconnected">Pendiente</b></div><div class="recovery-actions"><button class="btn warning" onclick="triggerBuzzer()">ACTIVAR BALIZA SONORA</button><button id="btn-finalize-mission" class="btn secondary" onclick="finalizeMission()">FINALIZAR MISIÓN</button></div></article>
     </section>
 
     <section class="panel log-panel"><div class="panel-heading"><div><span class="eyebrow">REGISTRO</span><h2>Eventos de misión</h2></div></div><div id="log-display" class="log-console"></div></section>

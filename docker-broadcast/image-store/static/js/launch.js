@@ -115,9 +115,7 @@ function triggerBuzzer() {
 }
 
 function finalizeMission() {
-    logMessage('info', 'MISIÓN', 'Finalizando misión. Sonda en fase de aterrizaje y recuperación.');
-    mission.state = 'recuperacion';
-    validateChecklist();
+    logMessage('info', 'MISIÓN', 'Finalizando misión y cerrando la recuperación.');
     fetch('/control_lanzamiento', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -125,8 +123,8 @@ function finalizeMission() {
     }).then(async response => {
         if (!response.ok) throw new Error(await response.text());
         const data = await response.json();
-        mission.state = data.estado || 'recuperacion';
-        logMessage('ok', 'MISIÓN', 'Misión finalizada. Reloj detenido; sonda en recuperación.');
+        mission.state = data.estado || 'finalizada';
+        logMessage('ok', 'MISIÓN', 'Misión finalizada. Reloj detenido.');
         validateChecklist();
     }).catch(error => {
         logMessage('err', 'MISIÓN', 'No se pudo finalizar la misión: ' + error.message);
@@ -135,21 +133,15 @@ function finalizeMission() {
 }
 
 function startNewMission() {
-    const pass = prompt("Introduce la contraseña de misión:");
-    if (pass === 'admin') {
-        logMessage('ok', 'SISTEMA', 'Iniciando una nueva sesión de misión.');
-        checklistPassed = false;
-        mission.state = 'espera';
-        fetch('/control_lanzamiento', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'reset' })
-        }).then(() => {
-            window.location.reload();
-        });
-    } else {
-        alert("Contraseña incorrecta.");
-    }
+    logMessage('info', 'SISTEMA', 'Creando una nueva sesión de misión...');
+    fetch('/control_lanzamiento', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reset' })
+    }).then(async response => {
+        if (!response.ok) throw new Error(await response.text());
+        window.location.reload();
+    }).catch(error => logMessage('err', 'MISIÓN', 'No se pudo crear la nueva misión: ' + error.message));
 }
 
 function validateChecklist() {
@@ -158,6 +150,8 @@ function validateChecklist() {
     const btnAbort = document.getElementById('btn-abort');
     const btnPreview = document.getElementById('btn-video-preview');
     const btnVideoConfirm = document.getElementById('btn-video-confirm');
+    const btnFinalize = document.getElementById('btn-finalize-mission');
+    const btnNewMission = document.getElementById('btn-new-mission');
     
     if (!btnReady || !btnArm || !btnAbort) return;
 
@@ -177,6 +171,8 @@ function validateChecklist() {
     // La previsualización y confirmación solo son posibles antes de armar.
     if (btnPreview) btnPreview.disabled = !(mission.state === 'espera' && preflightPassed && !videoPreviewInProgress && !videoConfirmed);
     if (btnVideoConfirm) btnVideoConfirm.disabled = !(mission.state === 'espera' && preflightPassed && videoPreviewReady && !videoConfirmed);
+    if (btnFinalize) btnFinalize.disabled = !(mission.state === 'lanzado' || mission.state === 'recuperacion');
+    if (btnNewMission) btnNewMission.hidden = !(mission.state === 'recuperacion' || mission.state === 'finalizada');
 
     if (mission.state === 'armada') {
         // El armado ya está confirmado: ahora se puede iniciar la cuenta atrás.
@@ -279,7 +275,7 @@ function updatePhaseIndicators(estado) {
     } else if (estado === 'lanzado') {
         p3.className = 'phase-card active';
         currentPhase = 3;
-    } else if (estado === 'recuperacion') {
+    } else if (estado === 'recuperacion' || estado === 'finalizada') {
         p4.className = 'phase-card active';
         currentPhase = 4;
     }

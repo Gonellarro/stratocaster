@@ -66,6 +66,11 @@ function updateGeneralStatusLarge() {
         large.className = 'header-pill waiting';
         return;
     }
+    if (mission.state === 'finalizada') {
+        large.textContent = 'FINALIZADA';
+        large.className = 'header-pill waiting';
+        return;
+    }
 
     // Al iniciar no hay todavía ningún enlace que declarar como perdido. La
     // alerta se reserva para una desconexión real tras haber tenido datos.

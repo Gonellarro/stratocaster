@@ -37,7 +37,7 @@ VDO_NINJA_VIEW_URL = os.environ.get('VDO_NINJA_VIEW_URL', 'https://vdo.ninja/?vi
 
 # Estado global del lanzamiento (en memoria)
 LAUNCH_STATE = {
-    'estado': 'espera',        # 'espera', 'armando', 'cuenta_atras', 'lanzado', 'recuperacion'
+    'estado': 'espera',        # espera, armando, armada, cuenta_atras, lanzado, recuperacion, finalizada
     'tiempo_restante': 0,
     'timestamp_inicio': 0.0,
     'timestamp_mision': 0.0
@@ -248,7 +248,7 @@ def change_launch_status():
         state['timestamp_mision'] = now
         state['tiempo_restante'] = COUNTDOWN_SECONDS
         state['last_event'] = 'Cuenta atrás iniciada'
-    elif action == 'abortar' or action == 'reset':
+    elif action == 'abortar':
         command_id = uuid.uuid4().hex
         publish_command('abort', command_id)
         state['estado'] = 'espera'
@@ -259,14 +259,20 @@ def change_launch_status():
         state['video_confirmed'] = False
         state['last_command_id'] = command_id
         state['last_event'] = 'Misión abortada; sistema en espera'
+    elif action == 'reset':
+        state = dict(DEFAULT_STATE)
+        state['mission_id'] = f"MISIÓN_{datetime.datetime.now().strftime('%Y_%m_%d_%H%M%S')}"
+        state['last_event'] = 'Nueva misión creada; sistema en espera'
     elif action == 'finalizar':
-        state['estado'] = 'recuperacion'
+        if state.get('estado') not in ('lanzado', 'recuperacion'):
+            return reject('Solo se puede finalizar una misión lanzada o en recuperación')
+        state['estado'] = 'finalizada'
         state['tiempo_restante'] = 0
         state['timestamp_inicio'] = 0.0
         state['timestamp_mision'] = 0.0
         state['preflight_passed'] = False
         state['video_confirmed'] = False
-        state['last_event'] = 'Misión en recuperación'
+        state['last_event'] = 'Misión finalizada'
     else:
         return reject('Acción desconocida')
 

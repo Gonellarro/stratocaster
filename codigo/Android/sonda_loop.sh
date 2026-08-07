@@ -40,7 +40,6 @@ fi
 TOPIC_STATUS="sonda/mobile/$DEVICE_ID/status"
 TOPIC_TELEMETRY="sonda/mobile/$DEVICE_ID/telemetry"
 TOPIC_CAMERA="sonda/mobile/$DEVICE_ID/camera"
-TOPIC_PROBE="sonda/mobile/$DEVICE_ID/probe"
 TOPIC_COMMAND="sonda/mobile/$DEVICE_ID/command"
 
 
@@ -48,7 +47,7 @@ TOPIC_COMMAND="sonda/mobile/$DEVICE_ID/command"
 mkdir -p "$PHOTO_DIR" "$AUDIO_DIR" "$STATE_DIR"
 
 # Verificar dependencias críticas de Termux y herramientas
-for cmd in termux-camera-photo termux-wake-lock termux-wake-unlock mosquitto_pub mosquitto_sub jq termux-battery-status termux-location termux-media-player; do
+for cmd in termux-camera-photo termux-wake-lock termux-wake-unlock mosquitto_pub mosquitto_sub jq timeout termux-battery-status termux-location termux-media-player; do
     if ! command -v "$cmd" &> /dev/null; then
         echo "[❌ ERROR] Falta '$cmd'. Ejecuta primero ./install_sonda.sh en Termux."
         exit 1
@@ -97,15 +96,15 @@ publish_mqtt() {
     fi
 }
 
-# Comprueba que el broker está disponible y que las credenciales MQTT siguen
-# siendo válidas. El probe no transporta telemetría ni se guarda en Flask.
+# Prueba extremo a extremo: conexión, autenticación, publicación y ACK del
+# broker. No se usa nc porque puede dar falsos negativos al cambiar de red.
 mqtt_connection_available() {
-    nc -z -w 2 "$MQTT_HOST" "$MQTT_PORT" &>/dev/null || return 1
-    # No usar -W: la versión de mosquitto_pub distribuida por Termux no
-    # implementa esa opción y devolvía fallo aunque el broker estuviera OK.
-    mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" \
+    local heartbeat_payload
+    heartbeat_payload=$(jq -nc --arg device_id "$DEVICE_ID" \
+        '{status:"heartbeat", device_id:$device_id, timestamp:now}')
+    timeout 5s mosquitto_pub -h "$MQTT_HOST" -p "$MQTT_PORT" \
         -u "$MQTT_USER" -P "$MQTT_PASS" \
-        -t "$TOPIC_PROBE" -n -q 0 &>/dev/null
+        -t "$TOPIC_STATUS" -m "$heartbeat_payload" -q 1 &>/dev/null
 }
 
 enter_recovery_mode() {
@@ -465,10 +464,9 @@ sleep 2
 
 START_TIME=$(date +%s)
 TIMEOUT_SAFETY=600
-LAST_FLIGHT_HEARTBEAT_AT=0
 LAST_CONNECTIVITY_CHECK_AT=0
 LAST_OFFLINE_TELEMETRY_AT=0
-COBERTURA=0
+COBERTURA=-1
 
 while true; do
     if [ -f "$RECOVERY_FLAG" ]; then
@@ -488,8 +486,14 @@ while true; do
     NOW=$(date +%s)
     if [ $((NOW - LAST_CONNECTIVITY_CHECK_AT)) -ge "$CONNECTIVITY_CHECK_INTERVAL" ]; then
         if mqtt_connection_available; then
+            if [ "$COBERTURA" -ne 1 ]; then
+                echo "[🛰️ NET] MQTT confirmado. Activando perfil normal."
+            fi
             COBERTURA=1
         else
+            if [ "$COBERTURA" -ne 0 ]; then
+                echo "[🛰️ NET] MQTT no disponible. Activando perfil de bajo consumo."
+            fi
             COBERTURA=0
         fi
         LAST_CONNECTIVITY_CHECK_AT="$NOW"
@@ -525,12 +529,9 @@ while true; do
       '{lat: $lat, lng: $lng, altitude: $alt, accuracy: $acc}')
 
     if [ "$COBERTURA" -eq 1 ]; then
-        # Con red: telemetría normal cada ciclo (5 s) y heartbeat cada 15 s.
+        # Con red: telemetría normal cada ciclo (5 s). El sondeo MQTT de los
+        # 15 s ya publica el heartbeat confirmado con QoS 1.
         publish_mqtt "$TOPIC_TELEMETRY" "$GPS_PAYLOAD"
-        if [ $((NOW - LAST_FLIGHT_HEARTBEAT_AT)) -ge 15 ]; then
-            publish_mqtt "$TOPIC_STATUS" "$(jq -n --arg device_id "$DEVICE_ID" '{status: "heartbeat", device_id: $device_id, timestamp: now}')"
-            LAST_FLIGHT_HEARTBEAT_AT="$NOW"
-        fi
         echo "[📡 TELEMETRÍA] Enviada: Alt: $ALT m, Acc: $ACC m"
     else
         # Sin red: solo un intento ligero por minuto; nunca bloquea el bucle.
@@ -584,7 +585,6 @@ LAST_ALTITUDE=""
 LOW_MOTION_CYCLES=0
 LANDING_STABLE_CYCLES=36
 LAST_LANDING_STATUS_AT=0
-LAST_HEARTBEAT_AT=0
 
 while true; do
     if [ -f "$RECOVERY_FLAG" ]; then
@@ -600,8 +600,14 @@ while true; do
     NOW=$(date +%s)
     if [ $((NOW - LAST_CONNECTIVITY_CHECK_AT)) -ge "$CONNECTIVITY_CHECK_INTERVAL" ]; then
         if mqtt_connection_available; then
+            if [ "$COBERTURA" -ne 1 ]; then
+                echo "[🛰️ NET] MQTT confirmado. Activando perfil normal."
+            fi
             COBERTURA=1
         else
+            if [ "$COBERTURA" -ne 0 ]; then
+                echo "[🛰️ NET] MQTT no disponible. Activando perfil de bajo consumo."
+            fi
             COBERTURA=0
         fi
         LAST_CONNECTIVITY_CHECK_AT="$NOW"
@@ -654,13 +660,6 @@ while true; do
 
     # 2. Gestión dinámica de conectividad en vuelo
     if [ "$COBERTURA" -eq 1 ]; then
-        # Heartbeat explícito: permite al servidor distinguir presencia móvil
-        # de la telemetría y detectar la recuperación de la comunicación.
-        NOW=$(date +%s)
-        if [ $((NOW - LAST_HEARTBEAT_AT)) -ge 15 ]; then
-            publish_mqtt "$TOPIC_STATUS" "$(jq -n --arg device_id "$DEVICE_ID" '{status: "heartbeat", device_id: $device_id, timestamp: now}')"
-            LAST_HEARTBEAT_AT="$NOW"
-        fi
         # Si aterrizó sin cobertura, repetir periódicamente el evento hasta
         # que la consola pueda pasar a recuperación.
         if [ -f "$LANDING_FLAG" ]; then
@@ -697,8 +696,6 @@ while true; do
         echo "[🛰️ NET] [$(date +%T)] Telemetría enviada por MQTT."
     else
         # Sin cobertura: Si el directo de Chrome está corriendo, lo matamos para salvar batería
-        # Forzar un heartbeat inmediato en cuanto vuelva la conexión.
-        LAST_HEARTBEAT_AT=0
         if [ "$VIDEO_RUNNING" -eq 1 ]; then
             echo "[🛰️ NET] Conexión perdida. Apagando vídeo para conservar batería..."
             stop_video_apps

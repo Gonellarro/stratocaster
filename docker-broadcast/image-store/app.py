@@ -167,11 +167,13 @@ def mobile_presence(state):
         'mobile_timeout': MOBILE_HEARTBEAT_TIMEOUT,
     }
 
-def handle_mqtt_status(message):
-    """Actualiza la misión desde eventos del móvil, sin depender del navegador."""
+def handle_mqtt_message(message):
+    """Actualiza presencia y eventos de misión desde cualquier canal del móvil."""
     topic = message.topic
-    expected_topic = f'sonda/mobile/{DEVICE_ID}/status'
-    if topic != expected_topic:
+    status_topic = f'sonda/mobile/{DEVICE_ID}/status'
+    telemetry_topic = f'sonda/mobile/{DEVICE_ID}/telemetry'
+    camera_topic = f'sonda/mobile/{DEVICE_ID}/camera'
+    if topic not in (status_topic, telemetry_topic, camera_topic):
         return
     try:
         payload = json.loads(message.payload.decode('utf-8'))
@@ -180,11 +182,11 @@ def handle_mqtt_status(message):
         return
     state = load_launch_state()
     state['mobile_last_seen'] = time.time()
-    state['mobile_last_status'] = payload.get('status', '')
+    state['mobile_last_status'] = payload.get('status') or topic.rsplit('/', 1)[-1]
     state['mobile_last_payload'] = payload
     save_launch_state(state)
 
-    if payload.get('status') != 'landed':
+    if topic != status_topic or payload.get('status') != 'landed':
         return
 
     if state.get('estado') not in ('lanzado', 'recuperacion'):
@@ -219,10 +221,12 @@ def start_mqtt_listener():
 
                 def on_connect(mqtt_client, userdata, flags, *args):
                     mqtt_client.subscribe(f'sonda/mobile/{DEVICE_ID}/status', qos=1)
-                    app.logger.info('Receptor MQTT interno conectado y suscrito al estado móvil')
+                    mqtt_client.subscribe(f'sonda/mobile/{DEVICE_ID}/telemetry', qos=1)
+                    mqtt_client.subscribe(f'sonda/mobile/{DEVICE_ID}/camera', qos=1)
+                    app.logger.info('Receptor MQTT interno conectado y suscrito a estado y telemetría móvil')
 
                 def on_message(mqtt_client, userdata, message):
-                    handle_mqtt_status(message)
+                    handle_mqtt_message(message)
 
                 client.on_connect = on_connect
                 client.on_message = on_message

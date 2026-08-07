@@ -407,6 +407,7 @@ sleep 2
 
 START_TIME=$(date +%s)
 TIMEOUT_SAFETY=600
+LAST_FLIGHT_HEARTBEAT_AT=0
 
 while true; do
     # Verificar si el operador ha enviado orden de abortar lanzamiento
@@ -436,6 +437,11 @@ while true; do
       --argjson acc "$ACC" \
       '{lat: $lat, lng: $lng, altitude: $alt, accuracy: $acc}')
     publish_mqtt "$TOPIC_TELEMETRY" "$GPS_PAYLOAD"
+    NOW=$(date +%s)
+    if [ $((NOW - LAST_FLIGHT_HEARTBEAT_AT)) -ge 15 ]; then
+        publish_mqtt "$TOPIC_STATUS" "$(jq -n --arg device_id "$DEVICE_ID" '{status: "heartbeat", device_id: $device_id, timestamp: now}')"
+        LAST_FLIGHT_HEARTBEAT_AT="$NOW"
+    fi
     echo "[📡 TELEMETRÍA] Enviada: Alt: $ALT m, Acc: $ACC m"
     
     ALT_INT=${ALT%.*}

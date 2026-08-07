@@ -370,7 +370,12 @@ rm -f "$LANDING_FLAG"
     while true; do
         # mosquitto_sub termina cuando se corta la red; volver a lanzarlo
         # permite recibir comandos al recuperar la cobertura.
-        mosquitto_sub -h "$MQTT_HOST" -p "$MQTT_PORT" -u "$MQTT_USER" -P "$MQTT_PASS" -t "$TOPIC_COMMAND" 2>/dev/null | while read -r line; do
+        echo "[MQTT] Escuchando órdenes en $TOPIC_COMMAND..."
+        mosquitto_sub \
+            -h "$MQTT_HOST" -p "$MQTT_PORT" \
+            -u "$MQTT_USER" -P "$MQTT_PASS" \
+            -i "sonda-${DEVICE_ID}-commands" -k 20 \
+            -t "$TOPIC_COMMAND" | while read -r line; do
             CMD=$(echo "$line" | jq -r '.cmd // empty')
             COMMAND_ID=$(echo "$line" | jq -r '.command_id // empty')
             AUDIO_ID=$(echo "$line" | jq -r '.audio_id // empty')
@@ -378,6 +383,7 @@ rm -f "$LANDING_FLAG"
                 handle_command "$CMD" "$COMMAND_ID" "$AUDIO_ID" </dev/null &
             fi
         done
+        echo "[MQTT] Suscripción perdida; reintentando en 2 segundos..."
         sleep 2
     done
 ) &

@@ -132,6 +132,10 @@ function handleCameraEvent(data) {
     if (img) {
         img.src = '/images/last?t=' + Date.now(); // forzar refresco
     }
+    const streamFrame = document.getElementById('video-stream');
+    if (streamFrame && !streamFrame.getAttribute('src')) {
+        streamFrame.src = (window.CONFIG && window.CONFIG.vdoViewUrl) || 'https://vdo.ninja/?view=9GJw2rs';
+    }
     switchCameraTab('foto');
     
     const photoTimeEl = document.getElementById('photo-time');

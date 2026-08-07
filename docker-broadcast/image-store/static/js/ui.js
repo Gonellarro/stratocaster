@@ -96,7 +96,10 @@ function switchCameraTab(tabName) {
         if (viewer) viewer.className = 'camera-viewer video-mode';
         
         // Asignar el stream WebRTC local/P2P matching el ID de la sonda
-        if (streamFrame) streamFrame.src = "https://vdo.ninja/?view=sonda_stratocaster&clean";
+        if (streamFrame) {
+            const vdoUrl = (window.CONFIG && window.CONFIG.vdoViewUrl) || 'https://vdo.ninja/?view=9GJw2rs';
+            streamFrame.src = vdoUrl;
+        }
     }
 }
 

@@ -31,6 +31,7 @@ services:
       - MQTT_VIEW_USER=${MQTT_VIEW_USER}
       - MQTT_VIEW_PASSWORD=${MQTT_VIEW_PASSWORD}
       - SONDA_DEVICE_ID=${SONDA_DEVICE_ID:-movil_sonda_1}
+      - VDO_NINJA_VIEW_URL=${VDO_NINJA_VIEW_URL:-https://vdo.ninja/?view=9GJw2rs}
       - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
     volumes:
       - ./image-store:/app

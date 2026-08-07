@@ -15,17 +15,16 @@ LAUNCH_FLAG="$HOME/imagenes/sonda.launch"
 ABORT_FLAG="$HOME/imagenes/sonda.abort"
 VIDEO_FLAG="$HOME/imagenes/sonda.video"
 LANDING_FLAG="$HOME/imagenes/sonda.landed"
-ALARM_AUDIO="$HOME/sonidos/alarma_recuperacion.mp3"
-TTS_LOCK_DIR="$HOME/.sonda_tts_lock"
-TTS_STREAM="${TTS_STREAM:-alarm}"
-TTS_SETTLE_SECONDS="${TTS_SETTLE_SECONDS:-4}"
-
-
 # Cargar variables de entorno y credenciales privadas desde 'sonda.env' si existe
 CONFIG_FILE="${SONDA_CONFIG_FILE:-$(dirname "$0")/sonda.env}"
 if [ -f "$CONFIG_FILE" ]; then
     source "$CONFIG_FILE"
 fi
+
+# Audio determinista: no se utiliza TTS. Por defecto la prueba reproduce la
+# misma alarma MP3 que se empleará para localizar la sonda tras el aterrizaje.
+ALARM_AUDIO="${ALARM_AUDIO:-$HOME/sonidos/alarma_recuperacion.mp3}"
+AUDIO_TEST_FILE="${AUDIO_TEST_FILE:-$ALARM_AUDIO}"
 
 # Definir valores predeterminados e identificador de dispositivo
 if [ -z "$DEVICE_ID" ]; then
@@ -40,10 +39,10 @@ TOPIC_COMMAND="sonda/mobile/$DEVICE_ID/command"
 
 
 # Asegurar la existencia de directorios de salida
-mkdir -p "$HOME/imagenes"
+mkdir -p "$HOME/imagenes" "$HOME/sonidos"
 
 # Verificar dependencias críticas de Termux y herramientas
-for cmd in termux-camera-photo termux-wake-lock termux-wake-unlock mosquitto_pub mosquitto_sub jq termux-battery-status termux-location termux-tts-speak termux-media-player; do
+for cmd in termux-camera-photo termux-wake-lock termux-wake-unlock mosquitto_pub mosquitto_sub jq termux-battery-status termux-location termux-media-player; do
     if ! command -v "$cmd" &> /dev/null; then
         echo "[❌ ERROR] Falta '$cmd'. Ejecuta primero ./install_sonda.sh en Termux."
         exit 1
@@ -74,6 +73,17 @@ start_recovery_audio() {
     ) &
 }
 
+play_audio_once() {
+    local audio_file="$1"
+    if [ ! -s "$audio_file" ]; then
+        echo "[AUDIO] No existe o está vacío: $audio_file" >&2
+        return 1
+    fi
+    stop_recovery_audio
+    echo "[AUDIO] Reproduciendo: $audio_file"
+    termux-media-player play "$audio_file" &>/dev/null
+}
+
 # Función auxiliar para publicar mensajes MQTT
 publish_mqtt() {
     local topic="$1"
@@ -96,45 +106,6 @@ publish_ack() {
     payload=$(jq -n --arg status "$status" --arg command_id "$command_id" --arg device_id "$DEVICE_ID" \
       '{status: $status, command_id: $command_id, device_id: $device_id, timestamp: now}')
     publish_mqtt "$TOPIC_STATUS" "$payload"
-}
-
-# Termux:API comparte el motor Android TTS entre todos los procesos. Como los
-# comandos MQTT se ejecutan en segundo plano, dos respuestas habladas podían
-# solaparse o dejar una petición sin reproducir. Serializamos las llamadas y
-# damos un tiempo máximo explícito; un lock huérfano se recupera al siguiente uso.
-speak_tts() {
-    local text="$1"
-    local owner=""
-    local waited=0
-    while ! mkdir "$TTS_LOCK_DIR" 2>/dev/null; do
-        owner=$(cat "$TTS_LOCK_DIR/pid" 2>/dev/null || true)
-        if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
-            rm -f "$TTS_LOCK_DIR/pid"
-            rmdir "$TTS_LOCK_DIR" 2>/dev/null || true
-            continue
-        fi
-        sleep 0.1
-        waited=$((waited + 1))
-        if [ "$waited" -ge 120 ]; then
-            echo "[AUDIO] Timeout esperando el motor TTS." >&2
-            return 1
-        fi
-    done
-
-    # BASHPID identifica el manejador MQTT concreto; $$ sería el PID del
-    # proceso principal y haría parecer vivo un lock de un proceso terminado.
-    printf '%s\n' "$BASHPID" > "$TTS_LOCK_DIR/pid"
-    local result=0
-    timeout 12 termux-tts-speak -s "$TTS_STREAM" "$text" || result=$?
-    if [ "$result" -eq 0 ] && [ "$TTS_SETTLE_SECONDS" -gt 0 ]; then
-        # termux-tts-speak confirma la entrega al servicio Android antes de
-        # que el altavoz empiece a sonar; dejamos margen para que no se pise
-        # la siguiente locución.
-        sleep "$TTS_SETTLE_SECONDS"
-    fi
-    rm -f "$TTS_LOCK_DIR/pid"
-    rmdir "$TTS_LOCK_DIR" 2>/dev/null || true
-    return "$result"
 }
 
 # Asegurar que la CPU de Android no entre en reposo profundo
@@ -221,8 +192,6 @@ handle_command() {
             echo "[🛰️ GPS] Iniciando receptor GPS..."
             publish_ack "gps_test_started" "$command_id"
             publish_mqtt "$TOPIC_STATUS" '{"status": "gps_initializing"}'
-            speak_tts "Iniciando búsqueda de satélites GPS." || echo "[AUDIO] No se pudo reproducir el aviso de inicio GPS." >&2
-            
             sleep 2
             LOC_JSON=$(get_gps_location)
             if [ -n "$LOC_JSON" ] && [ "$LOC_JSON" != "{}" ]; then
@@ -239,16 +208,14 @@ handle_command() {
                   '{status: "gps_ok", lat: $lat, lng: $lng, alt: $alt, accuracy: $acc}')
                   
                 publish_mqtt "$TOPIC_STATUS" "$STATUS_PAYLOAD"
-                speak_tts "Señal de GPS fijada correctamente." || echo "[AUDIO] No se pudo reproducir el aviso de GPS correcto." >&2
             else
                 publish_mqtt "$TOPIC_STATUS" '{"status": "gps_failed"}'
-                speak_tts "Error al fijar señal de GPS." || echo "[AUDIO] No se pudo reproducir el aviso de fallo GPS." >&2
             fi
             ;;
             
         "test_audio")
             publish_mqtt "$TOPIC_STATUS" '{"status": "audio_playing"}'
-            if speak_tts "Prueba de audio de la sonda."; then
+            if play_audio_once "$AUDIO_TEST_FILE"; then
                 publish_ack "audio_command_completed" "$command_id"
             else
                 publish_ack "audio_command_failed" "$command_id"
@@ -262,9 +229,11 @@ handle_command() {
                 *) publish_ack "audio_rejected_unknown" "$command_id"; return ;;
             esac
             if [ -f "$AUDIO_FILE" ]; then
-                stop_recovery_audio
-                termux-media-player play "$AUDIO_FILE" &>/dev/null
-                publish_ack "audio_playing" "$command_id"
+                if play_audio_once "$AUDIO_FILE"; then
+                    publish_ack "audio_playing" "$command_id"
+                else
+                    publish_ack "audio_playback_failed" "$command_id"
+                fi
             else
                 publish_ack "audio_rejected_missing_file" "$command_id"
             fi
@@ -341,7 +310,6 @@ handle_command() {
                       '{texto: $txt, url_imagen: $url, lat: $lat, lng: $lng, alt: $alt}')
                     
                     publish_mqtt "$TOPIC_CAMERA" "$PAYLOAD"
-                    speak_tts "Comprobación de cámara completada con éxito." || true
                 else
                     echo "[❌ ERROR] Falló la subida de la foto de test: $UPLOAD_RESP"
                     publish_mqtt "$TOPIC_STATUS" '{"status": "camera_error"}'
@@ -353,7 +321,6 @@ handle_command() {
             
         "reboot")
             echo "[⚠️ SISTEMA] Reiniciando el dispositivo móvil..."
-            speak_tts "Reiniciando el sistema de la sonda." || true
             sleep 1
             su -c reboot 2>/dev/null || reboot
             ;;
@@ -366,7 +333,6 @@ handle_command() {
             publish_mqtt "$TOPIC_STATUS" '{"status": "armed"}'
             publish_ack "armed" "$command_id"
             echo "[🛰️ NET] Sonda Armada. Esperando orden de lanzamiento..."
-            speak_tts "Sonda armada. Esperando lanzamiento." || true
             ;;
 
         "launch")
@@ -390,7 +356,6 @@ handle_command() {
             # Detener vídeo
             stop_video_apps
             
-            speak_tts "Lanzamiento abortado. Volviendo a modo de espera." || true
             sleep 1
             
             publish_mqtt "$TOPIC_STATUS" '{"status": "aborted"}'

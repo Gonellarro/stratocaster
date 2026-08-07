@@ -195,8 +195,12 @@ function pollLaunchStatus() {
     fetch('/control_lanzamiento')
         .then(r => r.json())
         .then(data => {
+            const previousMissionState = mission.state;
             mission.state = data.estado;
             if (data.mission_id) mission.id = data.mission_id;
+            if (previousMissionState !== 'lanzado' && data.estado === 'lanzado') {
+                logMessage('ok', 'MISIÓN', '¡Sonda lanzada con éxito! La misión está en vuelo.');
+            }
             // Flask es la autoridad de presencia móvil. El navegador no
             // deduce la cobertura por sus propios mensajes MQTT.
             if (typeof data.mobile_online === 'boolean') {

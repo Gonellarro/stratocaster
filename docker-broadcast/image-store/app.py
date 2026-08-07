@@ -117,7 +117,7 @@ def logout():
 
 STATE_FILE = os.environ.get('LAUNCH_STATE_FILE', '/data/launch_state.json')
 COUNTDOWN_SECONDS = 10
-MOBILE_HEARTBEAT_TIMEOUT = int(os.environ.get('MOBILE_HEARTBEAT_TIMEOUT', '60'))
+MOBILE_HEARTBEAT_TIMEOUT = int(os.environ.get('MOBILE_HEARTBEAT_TIMEOUT', '20'))
 
 DEFAULT_STATE = {
     'mission_id': '',

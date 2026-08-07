@@ -56,6 +56,11 @@ done
 # URL de VDO.ninja para transmisión de vídeo (facilidad de mantenimiento)
 VDO_NINJA_URL="https://vdo.ninja/?push=sonda_stratocaster&webcam&facing=back&autostart&noaudio&videobitrate=1000&quality=2&nopreview&clean&forcelandscape"
 
+# La posición se sigue leyendo para seguridad, pero la red se sondea con una
+# cadencia moderada para no gastar batería cuando no hay cobertura.
+CONNECTIVITY_CHECK_INTERVAL="${CONNECTIVITY_CHECK_INTERVAL:-15}"
+OFFLINE_TELEMETRY_INTERVAL="${OFFLINE_TELEMETRY_INTERVAL:-60}"
+
 # Función auxiliar para detener aplicaciones de vídeo en directo
 stop_video_apps() {
     echo "[🔌 VIDEO] Deteniendo transmisión de vídeo en directo..."
@@ -408,6 +413,9 @@ sleep 2
 START_TIME=$(date +%s)
 TIMEOUT_SAFETY=600
 LAST_FLIGHT_HEARTBEAT_AT=0
+LAST_CONNECTIVITY_CHECK_AT=0
+LAST_OFFLINE_TELEMETRY_AT=0
+COBERTURA=0
 
 while true; do
     # Verificar si el operador ha enviado orden de abortar lanzamiento
@@ -429,20 +437,39 @@ while true; do
     ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
     ACC=$(echo "$LOC_JSON" | jq -r '.accuracy // "null"')
     
-    # Enviar siempre el reporte de telemetría por MQTT (evita que el dashboard marque desconectado si no hay fix todavía)
+    # Preparar telemetría aunque todavía no exista fix GPS.
     GPS_PAYLOAD=$(jq -n \
       --argjson lat "$LAT" \
       --argjson lng "$LNG" \
       --argjson alt "$ALT" \
       --argjson acc "$ACC" \
       '{lat: $lat, lng: $lng, altitude: $alt, accuracy: $acc}')
-    publish_mqtt "$TOPIC_TELEMETRY" "$GPS_PAYLOAD"
     NOW=$(date +%s)
-    if [ $((NOW - LAST_FLIGHT_HEARTBEAT_AT)) -ge 15 ]; then
-        publish_mqtt "$TOPIC_STATUS" "$(jq -n --arg device_id "$DEVICE_ID" '{status: "heartbeat", device_id: $device_id, timestamp: now}')"
-        LAST_FLIGHT_HEARTBEAT_AT="$NOW"
+    if [ $((NOW - LAST_CONNECTIVITY_CHECK_AT)) -ge "$CONNECTIVITY_CHECK_INTERVAL" ]; then
+        if nc -z -w 2 "$MQTT_HOST" "$MQTT_PORT" &>/dev/null; then
+            COBERTURA=1
+        else
+            COBERTURA=0
+        fi
+        LAST_CONNECTIVITY_CHECK_AT="$NOW"
     fi
-    echo "[📡 TELEMETRÍA] Enviada: Alt: $ALT m, Acc: $ACC m"
+
+    if [ "$COBERTURA" -eq 1 ]; then
+        # Con red: telemetría normal cada ciclo (5 s) y heartbeat cada 15 s.
+        publish_mqtt "$TOPIC_TELEMETRY" "$GPS_PAYLOAD"
+        if [ $((NOW - LAST_FLIGHT_HEARTBEAT_AT)) -ge 15 ]; then
+            publish_mqtt "$TOPIC_STATUS" "$(jq -n --arg device_id "$DEVICE_ID" '{status: "heartbeat", device_id: $device_id, timestamp: now}')"
+            LAST_FLIGHT_HEARTBEAT_AT="$NOW"
+        fi
+        echo "[📡 TELEMETRÍA] Enviada: Alt: $ALT m, Acc: $ACC m"
+    elif [ $((NOW - LAST_OFFLINE_TELEMETRY_AT)) -ge "$OFFLINE_TELEMETRY_INTERVAL" ]; then
+        # Sin red: solo un intento ligero por minuto; nunca bloquea el bucle.
+        publish_mqtt "$TOPIC_TELEMETRY" "$GPS_PAYLOAD" true
+        LAST_OFFLINE_TELEMETRY_AT="$NOW"
+        echo "[📡 TELEMETRÍA] Sin red: intento reducido (cada ${OFFLINE_TELEMETRY_INTERVAL}s)."
+    else
+        echo "[📡 TELEMETRÍA] Sin red: envío aplazado para ahorrar batería."
+    fi
     
     ALT_INT=${ALT%.*}
     if [ -n "$ALT_INT" ] && [ "$ALT_INT" != "null" ]; then
@@ -498,11 +525,15 @@ while true; do
         stop_video_apps
         exec "$0" "$@"
     fi
-    # 1. Comprobar si hay cobertura de red real contra el Broker MQTT
-    if nc -z -w 2 "$MQTT_HOST" "$MQTT_PORT" &>/dev/null; then
-        COBERTURA=1
-    else
-        COBERTURA=0
+    # 1. Comprobar conectividad periódicamente, no en cada ciclo de GPS.
+    NOW=$(date +%s)
+    if [ $((NOW - LAST_CONNECTIVITY_CHECK_AT)) -ge "$CONNECTIVITY_CHECK_INTERVAL" ]; then
+        if nc -z -w 2 "$MQTT_HOST" "$MQTT_PORT" &>/dev/null; then
+            COBERTURA=1
+        else
+            COBERTURA=0
+        fi
+        LAST_CONNECTIVITY_CHECK_AT="$NOW"
     fi
 
     # Geolocalizar (leído en cada ciclo de 5s)

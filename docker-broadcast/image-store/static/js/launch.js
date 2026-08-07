@@ -207,8 +207,24 @@ function pollLaunchStatus() {
                 }
                 lastCoverageState = coverageState;
             }
-            preflightPassed = Boolean(data.preflight_passed || preflightPassed);
-            videoConfirmed = Boolean(data.video_confirmed || videoConfirmed);
+            preflightPassed = Boolean(data.preflight_passed);
+            videoConfirmed = Boolean(data.video_confirmed);
+            if (preflightPassed) {
+                checks.movil = true;
+                checks.battery = true;
+                checks.sensors = true;
+                checks.gps = true;
+                checks.camera_foto = true;
+                updateChecklistUI('chk-movil', 'ok', 'CONFIRMADO');
+                updateChecklistUI('chk-battery', 'ok', 'CONFIRMADO');
+                updateChecklistUI('chk-sensors', 'ok', 'CONFIRMADO');
+                updateChecklistUI('chk-gps', 'ok', 'CONFIRMADO');
+                updateChecklistUI('chk-foto', 'ok', 'CONFIRMADO');
+            }
+            if (videoConfirmed) {
+                checks.camera_video = true;
+                updateChecklistUI('chk-video', 'ok', 'CONFIRMADO EN OBS');
+            }
             checklistPassed = preflightPassed;
             
             const stateCard = document.getElementById('mission-state-card');

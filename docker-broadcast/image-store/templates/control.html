@@ -6,7 +6,7 @@
   <title>Control de misión · Sonda</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/control.css', v='20260807-15') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/control.css', v='20260816-06') }}">
   <script>
     window.CONFIG = { mqttUser: "{{ mqtt_user }}", mqttPass: "{{ mqtt_pass }}", deviceId: "{{ device_id }}", loraDeviceId: "{{ lora_device_id }}", aprsLoraDeviceId: "{{ aprs_lora_device_id }}", vdoViewUrl: "{{ vdo_view_url }}" };
   </script>
@@ -15,6 +15,14 @@
   <header class="mission-header">
     <div class="brand"><span class="brand-mark">●</span><div><strong>SONDA METEOROLÓGICA</strong><small>CONTROL DE MISIÓN</small></div></div>
     <div class="header-state"><span>ESTADO</span><b id="sys-status-large" class="header-pill waiting">ESPERA</b></div>
+    <div class="test-mode-control" title="Permite avanzar sin que los checks pendientes bloqueen la secuencia">
+      <span>MODO PRUEBAS</span>
+      <label class="toggle-switch" for="test-mode-toggle">
+        <input id="test-mode-toggle" type="checkbox" onchange="setTestMode(this.checked)">
+        <i class="toggle-slider"></i>
+      </label>
+      <b id="test-mode-label" class="test-mode-label">NORMAL</b>
+    </div>
     <div class="header-metric"><span>MISIÓN</span><b id="mission-id-card">--</b></div>
     <div class="header-metric"><span>TIEMPO</span><b id="mission-time">00:00:00</b></div>
     <button id="btn-new-mission" class="btn primary" onclick="startNewMission()">NUEVA MISIÓN</button>
@@ -93,12 +101,12 @@
   <div id="gps-debug-modal" class="modal" style="display:none"><div class="modal-content"><button onclick="closeGpsModal()">Cerrar</button><pre id="gps-modal-raw-json"></pre></div></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="{{ url_for('static', filename='js/state.js', v='20260816-03') }}"></script>
-  <script src="{{ url_for('static', filename='js/ui.js', v='20260816-02') }}"></script>
+  <script src="{{ url_for('static', filename='js/state.js', v='20260816-04') }}"></script>
+  <script src="{{ url_for('static', filename='js/ui.js', v='20260816-03') }}"></script>
   <script src="{{ url_for('static', filename='js/map.js', v='20260816-01') }}"></script>
   <script src="{{ url_for('static', filename='js/telemetry.js', v='20260816-04') }}"></script>
   <script src="{{ url_for('static', filename='js/checklist.js', v='20260816-05') }}"></script>
-  <script src="{{ url_for('static', filename='js/launch.js', v='20260816-02') }}"></script>
+  <script src="{{ url_for('static', filename='js/launch.js', v='20260816-03') }}"></script>
   <script src="{{ url_for('static', filename='js/fotos.js', v='20260807-19') }}"></script>
   <script src="{{ url_for('static', filename='js/main.js', v='20260816-03') }}"></script>
 </body>

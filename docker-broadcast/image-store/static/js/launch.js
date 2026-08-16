@@ -1,4 +1,28 @@
 // Gestión de Acciones de Lanzamiento y Secuencias REST
+function setTestMode(enabled) {
+    const toggle = document.getElementById('test-mode-toggle');
+    if (toggle) toggle.disabled = true;
+    fetch('/control_lanzamiento', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set_test_mode', enabled })
+    }).then(async response => {
+        if (!response.ok) throw new Error(await response.text());
+        const data = await response.json();
+        testModeEnabled = Boolean(data.test_mode);
+        updateTestModeUI();
+        validateChecklist();
+        logMessage(testModeEnabled ? 'warn' : 'info', 'SISTEMA', testModeEnabled
+            ? 'Modo pruebas activo: los checks pre-vuelo no bloquean el avance.'
+            : 'Modo pruebas desactivado: se aplican los checks habituales.');
+    }).catch(error => {
+        if (toggle) toggle.checked = !enabled;
+        logMessage('err', 'SISTEMA', 'No se pudo cambiar el modo pruebas: ' + error.message);
+    }).finally(() => {
+        if (toggle) toggle.disabled = false;
+    });
+}
+
 function readyLaunch() {
     logMessage('warn', 'MISIÓN', 'Enviando orden ARMAR. El móvil seguirá esperando el lanzamiento.');
     mission.state = 'armando';
@@ -42,7 +66,7 @@ function startVideoPreview() {
     if (confirm) confirm.disabled = true;
     logMessage('info', 'VÍDEO', 'Previsualización solicitada. Se observará durante 5 segundos.');
     videoPreviewTimer = setTimeout(() => {
-        if (!streamActive) {
+        if (!streamActive && !testModeEnabled) {
             videoPreviewInProgress = false;
             updateChecklistUI('chk-video', 'ko', 'Sin señal de vídeo');
             logMessage('err', 'VÍDEO', 'No se recibió señal de vídeo durante la previsualización.');
@@ -51,12 +75,14 @@ function startVideoPreview() {
         videoPreviewReady = true;
         videoPreviewInProgress = false;
         if (confirm) confirm.disabled = false;
-        logMessage('ok', 'VÍDEO', 'Previsualización completada. Confirma la imagen en OBS.');
+        logMessage(testModeEnabled && !streamActive ? 'warn' : 'ok', 'VÍDEO', testModeEnabled && !streamActive
+            ? 'Sin señal de vídeo; confirmación permitida por modo pruebas.'
+            : 'Previsualización completada. Confirma la imagen en OBS.');
     }, 5000);
 }
 
 function confirmVideo() {
-    if (mission.state !== 'espera' || !preflightPassed || !videoPreviewReady) return;
+    if (mission.state !== 'espera' || (!preflightPassed && !testModeEnabled) || !videoPreviewReady) return;
     videoConfirmed = true;
     checks.camera_video = true;
     updateChecklistUI('chk-video', 'ok', 'Confirmado en OBS');
@@ -147,7 +173,7 @@ function validateChecklist() {
     if (!btnReady || !btnArm || !btnAbort) return;
 
     // Si la verificación completa tuvo éxito o todos los checks están OK:
-    const isReady = preflightPassed && videoConfirmed;
+    const isReady = testModeEnabled || (preflightPassed && videoConfirmed);
     if (isReady) {
         checklistPassed = true;
     }
@@ -160,8 +186,8 @@ function validateChecklist() {
     }
 
     // La previsualización y confirmación solo son posibles antes de armar.
-    if (btnPreview) btnPreview.disabled = !(mission.state === 'espera' && preflightPassed && !videoPreviewInProgress && !videoConfirmed);
-    if (btnVideoConfirm) btnVideoConfirm.disabled = !(mission.state === 'espera' && preflightPassed && videoPreviewReady && !videoConfirmed);
+    if (btnPreview) btnPreview.disabled = !(mission.state === 'espera' && (preflightPassed || testModeEnabled) && !videoPreviewInProgress && !videoConfirmed);
+    if (btnVideoConfirm) btnVideoConfirm.disabled = !(mission.state === 'espera' && (preflightPassed || testModeEnabled) && videoPreviewReady && !videoConfirmed);
     if (btnFinalize) btnFinalize.disabled = !(mission.state === 'lanzado' || mission.state === 'recuperacion');
     if (btnNewMission) {
         btnNewMission.hidden = false;
@@ -170,6 +196,14 @@ function validateChecklist() {
 
     if (mission.state === 'armada') {
         // El armado ya está confirmado: ahora se puede iniciar la cuenta atrás.
+        btnArm.disabled = true;
+        btnReady.disabled = false;
+        return;
+    }
+
+    if (mission.state === 'armando' && testModeEnabled) {
+        // En pruebas se puede probar el lanzamiento aunque el teléfono no
+        // haya enviado el acuse ARMADA.
         btnArm.disabled = true;
         btnReady.disabled = false;
         return;
@@ -233,6 +267,8 @@ function pollLaunchStatus() {
             }
             preflightPassed = Boolean(data.preflight_passed);
             videoConfirmed = Boolean(data.video_confirmed);
+            testModeEnabled = Boolean(data.test_mode);
+            updateTestModeUI();
             if (preflightPassed) {
                 checks.movil = true;
                 checks.lora_telemetria = true;

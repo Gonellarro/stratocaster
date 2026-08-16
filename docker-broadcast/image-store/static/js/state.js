@@ -12,6 +12,7 @@ let videoConfirmed = false;
 let videoPreviewReady = false;
 let videoPreviewTimer = null;
 let videoPreviewInProgress = false;
+let testModeEnabled = false;
 let lastCoverageState = 'unknown';
 let loraTestStartedAt = 0;
 let aprsLoraTestStartedAt = 0;

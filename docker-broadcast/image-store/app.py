@@ -129,6 +129,10 @@ DEFAULT_STATE = {
     'timestamp_mision': 0.0,
     'preflight_passed': False,
     'video_confirmed': False,
+    # El modo de pruebas permite verificar el flujo completo sin que los
+    # checks pendientes bloqueen el avance. Se persiste en el servidor para
+    # que un refresco del navegador no altere el comportamiento.
+    'test_mode': False,
     'last_command_id': '',
     'last_event': 'Sistema en espera',
     'mobile_last_seen': 0.0,
@@ -334,6 +338,15 @@ def change_launch_status():
         state['video_confirmed'] = bool(data.get('video_confirmed', state.get('video_confirmed')))
         state['estado'] = 'espera'
         state['last_event'] = 'Pruebas pre-vuelo aprobadas'
+    elif action == 'set_test_mode':
+        if state.get('estado') != 'espera':
+            return reject('El modo de pruebas solo puede cambiarse con la misión en espera')
+        state['test_mode'] = bool(data.get('enabled'))
+        state['last_event'] = (
+            'Modo pruebas activado; los bloqueos de comprobación pre-vuelo se omiten'
+            if state['test_mode'] else
+            'Modo pruebas desactivado; se aplican las comprobaciones normales'
+        )
     elif action == 'preflight_reset':
         if state.get('estado') != 'espera':
             return reject('No se puede invalidar el pre-vuelo durante una misión activa')
@@ -341,14 +354,19 @@ def change_launch_status():
         state['video_confirmed'] = False
         state['last_event'] = 'Pruebas pre-vuelo caducadas; repetir autotest'
     elif action == 'video_confirmed':
-        if state.get('estado') != 'espera' or not state.get('preflight_passed'):
+        if state.get('estado') != 'espera' or (
+            not state.get('preflight_passed') and not state.get('test_mode')
+        ):
             return reject('Las pruebas pre-vuelo deben estar aprobadas antes del vídeo')
         state['video_confirmed'] = True
         state['last_event'] = 'Vídeo confirmado visualmente por el operador'
     elif action == 'armar':
-        if state.get('estado') != 'espera' or not state.get('preflight_passed') or not state.get('video_confirmed'):
+        test_mode = bool(state.get('test_mode'))
+        if state.get('estado') != 'espera' or (
+            not test_mode and (not state.get('preflight_passed') or not state.get('video_confirmed'))
+        ):
             return reject('Faltan pruebas pre-vuelo o confirmación visual del vídeo')
-        if not mobile_presence(state)['mobile_online']:
+        if not test_mode and not mobile_presence(state)['mobile_online']:
             return reject('El móvil no está comunicando con el servidor')
         state['estado'] = 'armando'
         state['tiempo_restante'] = 0
@@ -357,7 +375,10 @@ def change_launch_status():
         state['mission_id'] = data.get('mission_id') or f"MISIÓN_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
         command_id = uuid.uuid4().hex
         state['last_command_id'] = command_id
-        state['last_event'] = 'Orden ARMAR enviada; esperando acuse del móvil'
+        state['last_event'] = (
+            'Orden ARMAR enviada en modo pruebas; el acuse del móvil no bloqueará la cuenta atrás'
+            if test_mode else 'Orden ARMAR enviada; esperando acuse del móvil'
+        )
         if not publish_command('arm', command_id):
             return reject('No se pudo enviar la orden ARMAR')
     elif action == 'armada':
@@ -366,14 +387,18 @@ def change_launch_status():
         state['estado'] = 'armada'
         state['last_event'] = 'Móvil armado y esperando lanzamiento'
     elif action == 'ok':
-        if state.get('estado') != 'armada':
+        can_countdown_in_test_mode = state.get('test_mode') and state.get('estado') == 'armando'
+        if state.get('estado') != 'armada' and not can_countdown_in_test_mode:
             return reject('El móvil debe confirmar ARMADA antes de la cuenta atrás')
         now = time.time()
         state['estado'] = 'cuenta_atras'
         state['timestamp_inicio'] = now
         state['timestamp_mision'] = now
         state['tiempo_restante'] = COUNTDOWN_SECONDS
-        state['last_event'] = 'Cuenta atrás iniciada'
+        state['last_event'] = (
+            'Cuenta atrás iniciada en modo pruebas sin acuse ARMADA'
+            if can_countdown_in_test_mode else 'Cuenta atrás iniciada'
+        )
     elif action == 'recuperacion':
         if state.get('estado') not in ('lanzado', 'recuperacion'):
             return reject('La recuperación solo puede iniciarse tras el lanzamiento')

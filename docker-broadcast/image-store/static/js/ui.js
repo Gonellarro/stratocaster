@@ -92,6 +92,16 @@ function updateGeneralStatusLarge() {
     }
 }
 
+function updateTestModeUI() {
+    const toggle = document.getElementById('test-mode-toggle');
+    const label = document.getElementById('test-mode-label');
+    if (toggle) toggle.checked = testModeEnabled;
+    if (label) {
+        label.textContent = testModeEnabled ? 'ACTIVO' : 'NORMAL';
+        label.className = 'test-mode-label' + (testModeEnabled ? ' active' : '');
+    }
+}
+
 function switchCameraTab(tabName) {
     const tabFoto = document.getElementById('tab-foto');
     const tabVideo = document.getElementById('tab-video');

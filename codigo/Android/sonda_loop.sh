@@ -63,6 +63,12 @@ CONNECTIVITY_CHECK_INTERVAL="${CONNECTIVITY_CHECK_INTERVAL:-15}"
 OFFLINE_TELEMETRY_INTERVAL="${OFFLINE_TELEMETRY_INTERVAL:-60}"
 RECOVERY_DATA_INTERVAL="${RECOVERY_DATA_INTERVAL:-60}"
 
+# Una posición GPS se considera válida para vuelo cuando procede del receptor
+# GNSS, no está obsoleta y su radio de precisión es razonable. La red queda
+# como respaldo únicamente cuando no existe tal fix.
+GPS_MAX_ACCURACY_METERS="${GPS_MAX_ACCURACY_METERS:-75}"
+GPS_MAX_AGE_MS="${GPS_MAX_AGE_MS:-120000}"
+
 # Función auxiliar para detener aplicaciones de vídeo en directo
 stop_video_apps() {
     echo "[🔌 VIDEO] Deteniendo transmisión de vídeo en directo..."
@@ -194,32 +200,52 @@ termux-wake-lock
 GPS_LOG="$STATE_DIR/gps_updates.json"
 rm -f "$GPS_LOG"
 
-# Iniciar la suscripción pasiva a actualizaciones de ubicación en segundo plano
-termux-location -r updates > "$GPS_LOG" 2>/dev/null &
+# Iniciar el receptor GNSS explícitamente: sin -p gps Android puede entregar
+# una posición de red/fusionada de cientos de metros de error.
+termux-location -p gps -r updates > "$GPS_LOG" 2>/dev/null &
 GPS_PID=$!
 
 # Liberar recursos y matar el proceso de GPS/MQTT al salir del script
 trap 'echo "[INFO] Liberando recursos, deteniendo GPS y receptor MQTT..."; kill -9 $GPS_PID $SUB_PID 2>/dev/null; pkill -9 -P $SUB_PID 2>/dev/null; stop_recovery_audio; rm -f "$ARMED_FLAG" "$LAUNCH_FLAG"; termux-wake-unlock' EXIT
 
-# Función auxiliar para leer la mejor localización disponible al instante sin bloquear
+# Determina si el JSON contiene un fix GNSS reciente y suficientemente preciso.
+is_usable_gps_fix() {
+    local location_json="$1"
+    echo "$location_json" | jq -e \
+        --argjson max_accuracy "$GPS_MAX_ACCURACY_METERS" \
+        --argjson max_age "$GPS_MAX_AGE_MS" \
+        '(.provider == "gps") and
+         (.latitude != null) and (.longitude != null) and
+         (.accuracy != null) and (.accuracy <= $max_accuracy) and
+         ((.elapsedMs == null) or (.elapsedMs <= $max_age))' >/dev/null 2>&1
+}
+
+# Función auxiliar para leer la mejor localización disponible al instante sin bloquear.
+# El orden es deliberado: GPS reciente -> caché GPS -> red como último recurso.
 get_gps_location() {
     local LOC_JSON=""
+    local TEMP_JSON=""
     # 1. Intentar leer la última posición reportada por el listener pasivo
     if [ -f "$GPS_LOG" ] && [ -s "$GPS_LOG" ]; then
-        local TEMP_JSON
         TEMP_JSON=$(tail -n 1 "$GPS_LOG" 2>/dev/null)
-        # Verificar que sea un objeto JSON completo válido
-        if [[ "$TEMP_JSON" == \{*\} ]]; then
+        if [[ "$TEMP_JSON" == \{*\} ]] && is_usable_gps_fix "$TEMP_JSON"; then
             LOC_JSON="$TEMP_JSON"
         fi
     fi
-    # 2. Fallback a caché de red rápida
+    # 2. Fallback a caché GPS. Aún es preferible a cualquier estimación de red.
     if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ]; then
-        LOC_JSON=$(timeout 2 termux-location -p network -r last 2>/dev/null)
+        TEMP_JSON=$(timeout 3 termux-location -p gps -r last 2>/dev/null)
+        if is_usable_gps_fix "$TEMP_JSON"; then
+            LOC_JSON="$TEMP_JSON"
+        fi
     fi
-    # 3. Fallback a caché de GPS rápida
+    # 3. Solo sin GPS válido: última posición de red para no dejar la
+    # telemetría vacía. Su accuracy se seguirá publicando al panel de control.
     if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ]; then
-        LOC_JSON=$(timeout 2 termux-location -p gps -r last 2>/dev/null)
+        TEMP_JSON=$(timeout 2 termux-location -p network -r last 2>/dev/null)
+        if [[ "$TEMP_JSON" == \{*\} ]]; then
+            LOC_JSON="$TEMP_JSON"
+        fi
     fi
     
     # Asegurar que al menos devolvemos un JSON vacío válido

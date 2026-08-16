@@ -201,19 +201,14 @@ termux-wake-lock
 
 # Definir ruta para el log de posicionamiento pasivo continuo
 GPS_LOG="$STATE_DIR/gps_updates.json"
-GPS_RAW_LOG="$STATE_DIR/gps_updates.raw.log"
-GPS_ERROR_LOG="$STATE_DIR/gps_updates.error.log"
-GPS_LAST_ERROR_LOG="$STATE_DIR/gps_last.error.log"
-rm -f "$GPS_LOG" "$GPS_RAW_LOG" "$GPS_ERROR_LOG" "$GPS_LAST_ERROR_LOG"
+rm -f "$GPS_LOG"
 
 # Iniciar el receptor GNSS explícitamente: sin -p gps Android puede entregar
 # una posición de red/fusionada de cientos de metros de error. termux-location
 # imprime JSON multilínea; jq lo compacta a una línea por fix para poder leer
-# siempre el último objeto completo con tail -n 1. Durante este diagnóstico
-# también se conservan salida cruda y errores bajo ~/.sonda/.
-termux-location -p gps -r updates 2>"$GPS_ERROR_LOG" | tee "$GPS_RAW_LOG" | jq -c --unbuffered . > "$GPS_LOG" &
+# siempre el último objeto completo con tail -n 1.
+termux-location -p gps -r updates 2>/dev/null | jq -c --unbuffered . > "$GPS_LOG" &
 GPS_PID=$!
-echo "[GPS DEBUG] Listener iniciado (PID $GPS_PID). Logs: $GPS_LOG, $GPS_RAW_LOG y $GPS_ERROR_LOG"
 
 # Liberar recursos y matar el proceso de GPS/MQTT al salir del script
 trap 'echo "[INFO] Liberando recursos, deteniendo GPS y receptor MQTT..."; kill -9 $GPS_PID $SUB_PID 2>/dev/null; pkill -9 -P $SUB_PID 2>/dev/null; stop_recovery_audio; rm -f "$ARMED_FLAG" "$LAUNCH_FLAG"; termux-wake-unlock' EXIT
@@ -230,58 +225,24 @@ is_usable_gps_fix() {
          ((.elapsedMs == null) or (.elapsedMs <= $max_age))' >/dev/null 2>&1
 }
 
-# Diagnóstico temporal: se escribe en stderr para no contaminar el JSON que
-# devuelven get_gps_location y wait_for_gps_fix mediante sustitución de comando.
-gps_debug() {
-    [ "${GPS_DEBUG_ACTIVE:-0}" = "1" ] && echo "[GPS DEBUG] $*" >&2
-}
-
-gps_debug_fix_details() {
-    local source="$1"
-    local location_json="$2"
-    local provider accuracy elapsed latitude longitude
-    [ "${GPS_DEBUG_ACTIVE:-0}" = "1" ] || return 0
-    provider=$(echo "$location_json" | jq -r '.provider // "sin provider"' 2>/dev/null)
-    accuracy=$(echo "$location_json" | jq -r '.accuracy // "sin accuracy"' 2>/dev/null)
-    elapsed=$(echo "$location_json" | jq -r '.elapsedMs // "sin elapsedMs"' 2>/dev/null)
-    latitude=$(echo "$location_json" | jq -r '.latitude // "sin lat"' 2>/dev/null)
-    longitude=$(echo "$location_json" | jq -r '.longitude // "sin lng"' 2>/dev/null)
-    gps_debug "$source: provider=$provider accuracy=$accuracy elapsedMs=$elapsed lat=$latitude lng=$longitude"
-}
-
 # Función auxiliar para leer la mejor localización disponible al instante sin bloquear.
 # Solo se acepta GPS GNSS reciente: una posición de red de 200 m puede situar
 # la sonda a cientos de metros y es peor que conservar la última posición buena.
 get_gps_location() {
     local LOC_JSON=""
     local TEMP_JSON=""
-    local LAST_EXIT=0
     # 1. Intentar leer la última posición reportada por el listener pasivo
     if [ -f "$GPS_LOG" ] && [ -s "$GPS_LOG" ]; then
         TEMP_JSON=$(tail -n 1 "$GPS_LOG" 2>/dev/null)
-        gps_debug_fix_details "listener" "$TEMP_JSON"
         if [[ "$TEMP_JSON" == \{*\} ]] && is_usable_gps_fix "$TEMP_JSON"; then
             LOC_JSON="$TEMP_JSON"
-            gps_debug "listener: fix GNSS aceptado"
-        else
-            gps_debug "listener: fix descartado (debe ser provider=gps, accuracy <= ${GPS_MAX_ACCURACY_METERS} m y edad <= ${GPS_MAX_AGE_MS} ms)"
         fi
-    else
-        gps_debug "listener: aún no hay ningún JSON compacto en $GPS_LOG"
     fi
     # 2. Fallback a caché GPS. Aún es preferible a cualquier estimación de red.
     if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ]; then
-        TEMP_JSON=$(timeout 5 termux-location -p gps -r last 2>"$GPS_LAST_ERROR_LOG")
-        LAST_EXIT=$?
-        gps_debug_fix_details "consulta gps/last (exit=$LAST_EXIT)" "$TEMP_JSON"
-        if [ -s "$GPS_LAST_ERROR_LOG" ]; then
-            gps_debug "consulta gps/last stderr: $(tr '\n' ' ' < "$GPS_LAST_ERROR_LOG")"
-        fi
+        TEMP_JSON=$(timeout 5 termux-location -p gps -r last 2>/dev/null)
         if is_usable_gps_fix "$TEMP_JSON"; then
             LOC_JSON="$TEMP_JSON"
-            gps_debug "consulta gps/last: fix GNSS aceptado"
-        else
-            gps_debug "consulta gps/last: fix descartado o no disponible"
         fi
     fi
     # Sin un fix GNSS válido devolvemos vacío. Los consumidores no moverán el
@@ -297,25 +258,19 @@ get_gps_location() {
 # es preferible informar de que aún no hay fix antes que publicar una posición
 # desplazada cientos de metros.
 wait_for_gps_fix() {
-    local deadline now location_json attempt=0
+    local deadline now location_json
     deadline=$(( $(date +%s) + GPS_FIX_TIMEOUT_SECONDS ))
     while true; do
-        attempt=$((attempt + 1))
         location_json=$(get_gps_location)
         if [ "$location_json" != "{}" ]; then
-            gps_debug "Fix GNSS conseguido en el intento $attempt"
             echo "$location_json"
             return 0
         fi
         now=$(date +%s)
         if [ "$now" -ge "$deadline" ]; then
-            gps_debug "Tiempo agotado tras $attempt intentos. Último JSON listener: $(tail -n 1 "$GPS_LOG" 2>/dev/null || true)"
-            gps_debug "Últimas líneas crudas: $(tail -n 3 "$GPS_RAW_LOG" 2>/dev/null | tr '\n' ' ' || true)"
-            gps_debug "Errores listener: $(tail -n 3 "$GPS_ERROR_LOG" 2>/dev/null | tr '\n' ' ' || true)"
             echo "{}"
             return 1
         fi
-        gps_debug "Sin fix válido (intento $attempt). Reintentando en 2 s..."
         sleep 2
     done
 }
@@ -409,11 +364,7 @@ handle_command() {
             echo "[🛰️ GPS] Iniciando receptor GPS..."
             publish_ack "gps_test_started" "$command_id"
             publish_mqtt "$TOPIC_STATUS" "$(jq -n --argjson timeout "$GPS_FIX_TIMEOUT_SECONDS" '{status:"gps_initializing", timeout_seconds:$timeout}')"
-            echo "[GPS DEBUG] Iniciando diagnóstico de adquisición; máximo ${GPS_FIX_TIMEOUT_SECONDS}s."
-            GPS_DEBUG_ACTIVE=1
             LOC_JSON=$(wait_for_gps_fix)
-            GPS_FIX_RESULT=$?
-            GPS_DEBUG_ACTIVE=0
             if [ -n "$LOC_JSON" ] && [ "$LOC_JSON" != "{}" ]; then
                 LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
                 LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')
@@ -429,7 +380,6 @@ handle_command() {
                   
                 publish_mqtt "$TOPIC_STATUS" "$STATUS_PAYLOAD"
             else
-                echo "[GPS DEBUG] Check GPS fallido (wait_for_gps_fix exit=$GPS_FIX_RESULT). Revisa los logs indicados arriba."
                 publish_mqtt "$TOPIC_STATUS" '{"status": "gps_failed"}'
             fi
             ;;

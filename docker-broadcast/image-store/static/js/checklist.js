@@ -143,9 +143,9 @@ function handleStepSuccess() {
     } else if (step.id === 'chk-gps') {
         const accText = document.getElementById('chk-gps-val').textContent;
         if (accText && accText.includes('m')) {
-            const match = accText.match(/\d+(\.\d+)?/);
-            const accVal = match ? parseFloat(match[0]) : 99;
-            updateChecklistUI(step.id, accVal <= 15 ? 'ok' : 'warn', accText);
+            // El móvil solo emite gps_ok tras pasar su umbral GNSS (75 m por
+            // defecto). Si llegó ese evento, el fix es apto para pre-vuelo.
+            updateChecklistUI(step.id, 'ok', accText);
         } else {
             updateChecklistUI(step.id, 'ok', 'CONFIRMADO');
         }

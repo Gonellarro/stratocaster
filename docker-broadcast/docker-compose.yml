@@ -31,6 +31,7 @@ services:
       - MQTT_VIEW_USER=${MQTT_VIEW_USER}
       - MQTT_VIEW_PASSWORD=${MQTT_VIEW_PASSWORD}
       - SONDA_DEVICE_ID=${SONDA_DEVICE_ID:-movil_sonda_1}
+      - LORA_DEVICE_ID=${LORA_DEVICE_ID:-rx_sonda}
       - VDO_NINJA_VIEW_URL=${VDO_NINJA_VIEW_URL:-https://vdo.ninja/?view=sonda_stratocaster}
       - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
     volumes:

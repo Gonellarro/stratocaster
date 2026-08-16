@@ -12,6 +12,17 @@ const testSteps = [
         critical: true
     },
     {
+        id: 'chk-lora',
+        name: 'Enlace LoRa',
+        // La radio transmite por cadencia propia: se exige una trama nueva
+        // recibida durante este autotest, no solo el estado visual previo.
+        run: () => {},
+        check: () => checks.lora_telemetria,
+        timeout: 120000,
+        retries: 1,
+        critical: true
+    },
+    {
         id: 'chk-battery',
         name: 'Batería Móvil',
         run: () => {},
@@ -210,7 +221,7 @@ function stopSelfTestOnFailure() {
 }
 
 function resetChecklistUI() {
-    const ids = ['chk-movil', 'chk-gps', 'chk-battery', 'chk-sensors', 'chk-foto', 'chk-video'];
+    const ids = ['chk-movil', 'chk-lora', 'chk-gps', 'chk-battery', 'chk-sensors', 'chk-foto', 'chk-video'];
     ids.forEach(id => {
         const item = document.getElementById(id);
         if (item) item.className = 'checklist-item ko';
@@ -252,8 +263,8 @@ setInterval(() => {
 }, 4000);
 
 function tryApprovePreflight() {
-    if (!isSequenceRunning && checks.movil && checks.gps && checks.battery &&
-        checks.sensors && checks.camera_foto) {
+    if (!isSequenceRunning && checks.movil && checks.lora_telemetria && checks.gps &&
+        checks.battery && checks.sensors && checks.camera_foto) {
         preflightPassed = true;
         checklistPassed = true;
         fetch('/control_lanzamiento', {

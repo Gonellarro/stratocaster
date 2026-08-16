@@ -27,10 +27,9 @@ let markerAdded = {
     lora: false
 };
 
-let paths = {
-    movil: L.polyline([], { color: '#0891b2', weight: 3 }).addTo(map),
-    lora: L.polyline([], { color: '#dc2626', weight: 3, dashArray: '5, 5' }).addTo(map)
-};
+// El mapa de control muestra la posición actual de cada enlace, no un trazado
+// que pueda unir puntos de fuentes o momentos distintos.
+let paths = {};
 
 // Función para actualizar posición y trazar rutas
 function updateMapCoordinates(type, lat, lng) {
@@ -47,9 +46,6 @@ function updateMapCoordinates(type, lat, lng) {
             markers[type].addTo(map);
             markerAdded[type] = true;
         }
-    }
-    if (paths[type]) {
-        paths[type].addLatLng(latlng);
     }
     
     // Auto-centrar en el primer paquete válido recibido de la sonda (vía Móvil o LoRa)

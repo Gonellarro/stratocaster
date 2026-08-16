@@ -235,11 +235,13 @@ function pollLaunchStatus() {
             videoConfirmed = Boolean(data.video_confirmed);
             if (preflightPassed) {
                 checks.movil = true;
+                checks.lora_telemetria = true;
                 checks.battery = true;
                 checks.sensors = true;
                 checks.gps = true;
                 checks.camera_foto = true;
                 updateChecklistUI('chk-movil', 'ok', 'CONFIRMADO');
+                updateChecklistUI('chk-lora', 'ok', 'CONFIRMADO');
                 updateChecklistUI('chk-battery', 'ok', 'CONFIRMADO');
                 updateChecklistUI('chk-sensors', 'ok', 'CONFIRMADO');
                 updateChecklistUI('chk-gps', 'ok', 'CONFIRMADO');

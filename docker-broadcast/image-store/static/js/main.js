@@ -1,6 +1,7 @@
 // Obtener el identificador del dispositivo a controlar de los parámetros de la URL
 const urlParams = new URLSearchParams(window.location.search);
 const targetDeviceID = (window.CONFIG && window.CONFIG.deviceId) || urlParams.get('device_id') || 'movil_sonda_1';
+const targetLoraDeviceID = (window.CONFIG && window.CONFIG.loraDeviceId) || 'rx_sonda';
 
 function sendCommand(cmdName, extra = {}) {
     const commandId = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
@@ -41,9 +42,8 @@ client.on('connect', () => {
     client.subscribe(`sonda/mobile/${targetDeviceID}/camera`);
     client.subscribe(`sonda/mobile/${targetDeviceID}/telemetry`);
     
-    // Suscripciones de telemetría de radio generales (LoRa y Mesh)
-    client.subscribe('sonda/lora/+/telemetry');
-    client.subscribe('gps/data');
+    // Solo el receptor LoRa asignado a esta misión puede alimentar el control.
+    client.subscribe(`sonda/lora/${targetLoraDeviceID}/telemetry`);
     
 });
 
@@ -76,8 +76,8 @@ client.on('message', (topic, message) => {
         lastSondaPing = Date.now();
         handleCameraEvent(payload);
     }
-    // 2. Mensajes de receptor LoRa (estructura estandarizada sonda/lora/+/telemetry o legacy gps/data)
-    else if ((topicParts[0] === 'sonda' && topicParts[1] === 'lora' && topicParts[3] === 'telemetry') || topic === 'gps/data') {
+    // 2. Mensajes del receptor LoRa asignado a esta misión.
+    else if (topic === `sonda/lora/${targetLoraDeviceID}/telemetry`) {
         lastLoraPing = Date.now();
         loraOnline = true;
         updateLinkState('lora', true);

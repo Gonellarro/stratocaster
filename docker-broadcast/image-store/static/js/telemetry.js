@@ -115,13 +115,9 @@ function handleLoraTelemetry(data) {
         document.getElementById('mini-crs').textContent = getWindDirection(courseNum) + ' (' + courseNum.toFixed(1) + '°)';
     }
 
-    // 5. Pintar ruta y marcador rojo de LoRa en el mapa
+    // 5. Pintar el marcador rojo de LoRa en el mapa
     updateMapCoordinates('lora', data.lat, data.lng);
 
-    // Si la Sonda Móvil (4G) está activa/conectada, posicionar también el marcador cian del Móvil en la ubicación de la sonda
-    if (Date.now() - lastSondaPing < 35000 && lastSondaPing > 0) {
-        updateMapCoordinates('movil', data.lat, data.lng);
-    }
 }
 
 function handleCameraEvent(data) {

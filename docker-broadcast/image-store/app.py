@@ -37,6 +37,7 @@ MQTT_PASS = os.environ.get('MQTT_COMMAND_PASSWORD', os.environ.get('TELEGRAF_MQT
 MQTT_VIEW_USER = os.environ.get('MQTT_VIEW_USER', os.environ.get('TELEGRAF_MQTT_USER', ''))
 MQTT_VIEW_PASS = os.environ.get('MQTT_VIEW_PASSWORD', os.environ.get('TELEGRAF_MQTT_PASSWORD', ''))
 DEVICE_ID = os.environ.get('SONDA_DEVICE_ID', 'movil_sonda_1')
+LORA_DEVICE_ID = os.environ.get('LORA_DEVICE_ID', 'rx_sonda')
 VDO_NINJA_VIEW_URL = os.environ.get('VDO_NINJA_VIEW_URL', 'https://vdo.ninja/?view=sonda_stratocaster')
 
 # Estado global del lanzamiento (en memoria)
@@ -548,7 +549,8 @@ def last_image():
 @login_required
 def control_panel():
     return render_template('control.html', mqtt_user=MQTT_VIEW_USER, mqtt_pass=MQTT_VIEW_PASS,
-                           device_id=DEVICE_ID, vdo_view_url=VDO_NINJA_VIEW_URL)
+                           device_id=DEVICE_ID, lora_device_id=LORA_DEVICE_ID,
+                           vdo_view_url=VDO_NINJA_VIEW_URL)
 
 start_mqtt_listener()
 

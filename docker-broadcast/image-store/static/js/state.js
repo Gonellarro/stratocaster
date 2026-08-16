@@ -14,6 +14,13 @@ let videoPreviewTimer = null;
 let videoPreviewInProgress = false;
 let lastCoverageState = 'unknown';
 let loraTestStartedAt = 0;
+let aprsLoraTestStartedAt = 0;
+const APRS_DATA_MAX_AGE_MS = 10 * 60 * 1000;
+let aprsLoraData = {
+    lat: null, lng: null, temperature: null, pressure: null,
+    positionUpdatedAt: 0, temperatureUpdatedAt: 0, pressureUpdatedAt: 0,
+    lastSeen: 0
+};
 let mobileOnline = false;
 let loraOnline = false;
 let landingTransitionRequested = false;
@@ -22,6 +29,7 @@ let landingTransitionRequested = false;
 let checks = {
     movil: false,
     lora_telemetria: false,
+    aprs_lora: false,
     camera_foto: false,
     camera_video: false,
     battery: false,

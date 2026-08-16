@@ -2,6 +2,7 @@
 const urlParams = new URLSearchParams(window.location.search);
 const targetDeviceID = (window.CONFIG && window.CONFIG.deviceId) || urlParams.get('device_id') || 'movil_sonda_1';
 const targetLoraDeviceID = (window.CONFIG && window.CONFIG.loraDeviceId) || 'rx_sonda';
+const targetAprsLoraDeviceID = (window.CONFIG && window.CONFIG.aprsLoraDeviceId) || 'EA2FMQ-8';
 
 function sendCommand(cmdName, extra = {}) {
     const commandId = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
@@ -44,6 +45,7 @@ client.on('connect', () => {
     
     // Solo el receptor LoRa asignado a esta misión puede alimentar el control.
     client.subscribe(`sonda/lora/${targetLoraDeviceID}/telemetry`);
+    client.subscribe(`sonda/lora/${targetAprsLoraDeviceID}/telemetry`);
     
 });
 
@@ -82,6 +84,9 @@ client.on('message', (topic, message) => {
         loraOnline = true;
         updateLinkState('lora', true);
         handleLoraTelemetry(payload);
+    }
+    else if (topic === `sonda/lora/${targetAprsLoraDeviceID}/telemetry`) {
+        handleAprsLoraTelemetry(payload);
     }
     
     // Si la secuencia de autotest está activa, comprobar éxito del paso actual

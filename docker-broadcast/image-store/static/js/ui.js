@@ -20,17 +20,17 @@ function updateChecklistUI(id, state, labelText) {
 
     const summary = document.getElementById('preflight-summary');
     if (summary) {
-        const checkIds = ['chk-movil', 'chk-lora', 'chk-gps', 'chk-battery', 'chk-sensors', 'chk-foto', 'chk-video'];
+        const checkIds = ['chk-movil', 'chk-lora', 'chk-aprs-lora', 'chk-gps', 'chk-battery', 'chk-sensors', 'chk-foto', 'chk-video'];
         const passed = checkIds.filter(checkId => document.getElementById(checkId)?.classList.contains('ok')).length;
-        summary.textContent = `${passed}/7`;
+        summary.textContent = `${passed}/8`;
     }
 }
 
 function updatePreflightSummary() {
     const summary = document.getElementById('preflight-summary');
     if (!summary) return;
-    const ids = ['chk-movil', 'chk-lora', 'chk-gps', 'chk-battery', 'chk-sensors', 'chk-foto', 'chk-video'];
-    summary.textContent = `${ids.filter(checkId => document.getElementById(checkId)?.classList.contains('ok')).length}/7`;
+    const ids = ['chk-movil', 'chk-lora', 'chk-aprs-lora', 'chk-gps', 'chk-battery', 'chk-sensors', 'chk-foto', 'chk-video'];
+    summary.textContent = `${ids.filter(checkId => document.getElementById(checkId)?.classList.contains('ok')).length}/8`;
 }
 
 function updateLinkState(linkId, connected) {

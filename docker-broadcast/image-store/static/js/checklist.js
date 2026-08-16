@@ -23,6 +23,17 @@ const testSteps = [
         critical: true
     },
     {
+        id: 'chk-aprs-lora',
+        name: 'LoRa APRS (posición, temperatura y presión)',
+        // EA2FMQ-8 emite por su propia cadencia APRS. Se exige una trama
+        // nueva durante el autotest y los tres grupos de valores recientes.
+        run: () => {},
+        check: () => checks.aprs_lora,
+        timeout: 120000,
+        retries: 1,
+        critical: true
+    },
+    {
         id: 'chk-battery',
         name: 'Batería Móvil',
         run: () => {},
@@ -61,10 +72,12 @@ function runSelfTest() {
     if (isSequenceRunning) return;
     isSequenceRunning = true;
     loraTestStartedAt = Date.now();
+    aprsLoraTestStartedAt = Date.now();
     
     // Resetear estados locales
     checks.movil = false;
     checks.lora_telemetria = false;
+    checks.aprs_lora = false;
     checks.camera_foto = false;
     checks.camera_video = false;
     checks.battery = false;
@@ -154,6 +167,8 @@ function handleStepSuccess() {
         } else {
             updateChecklistUI(step.id, 'ok', 'CONFIRMADO');
         }
+    } else if (step.id === 'chk-aprs-lora') {
+        updateChecklistUI(step.id, 'ok', aprsChecklistLabel());
     } else {
         updateChecklistUI(step.id, 'ok', 'CONFIRMADO');
     }
@@ -221,7 +236,7 @@ function stopSelfTestOnFailure() {
 }
 
 function resetChecklistUI() {
-    const ids = ['chk-movil', 'chk-lora', 'chk-gps', 'chk-battery', 'chk-sensors', 'chk-foto', 'chk-video'];
+    const ids = ['chk-movil', 'chk-lora', 'chk-aprs-lora', 'chk-gps', 'chk-battery', 'chk-sensors', 'chk-foto', 'chk-video'];
     ids.forEach(id => {
         const item = document.getElementById(id);
         if (item) item.className = 'checklist-item ko';
@@ -233,6 +248,7 @@ function resetChecklistUI() {
     stepAdvancing = false;
     checks.movil = false;
     checks.lora_telemetria = false;
+    checks.aprs_lora = false;
     checks.camera_foto = false;
     checks.camera_video = false;
     checks.battery = false;
@@ -263,7 +279,7 @@ setInterval(() => {
 }, 4000);
 
 function tryApprovePreflight() {
-    if (!isSequenceRunning && checks.movil && checks.lora_telemetria && checks.gps &&
+    if (!isSequenceRunning && checks.movil && checks.lora_telemetria && checks.aprs_lora && checks.gps &&
         checks.battery && checks.sensors && checks.camera_foto) {
         preflightPassed = true;
         checklistPassed = true;

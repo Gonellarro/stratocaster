@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/control.css', v='20260807-15') }}">
   <script>
-    window.CONFIG = { mqttUser: "{{ mqtt_user }}", mqttPass: "{{ mqtt_pass }}", deviceId: "{{ device_id }}", loraDeviceId: "{{ lora_device_id }}", vdoViewUrl: "{{ vdo_view_url }}" };
+    window.CONFIG = { mqttUser: "{{ mqtt_user }}", mqttPass: "{{ mqtt_pass }}", deviceId: "{{ device_id }}", loraDeviceId: "{{ lora_device_id }}", aprsLoraDeviceId: "{{ aprs_lora_device_id }}", vdoViewUrl: "{{ vdo_view_url }}" };
   </script>
 </head>
 <body>
@@ -31,13 +31,14 @@
 
     <section class="mission-grid top-grid">
       <article class="panel preflight-panel">
-        <div class="panel-heading"><div><span class="eyebrow">ANTES DEL DESPEGUE</span><h2>Comprobaciones</h2></div><span id="preflight-summary" class="summary-badge">0/7</span></div>
+        <div class="panel-heading"><div><span class="eyebrow">ANTES DEL DESPEGUE</span><h2>Comprobaciones</h2></div><span id="preflight-summary" class="summary-badge">0/8</span></div>
         <div class="check-grid">
           <div class="check-column">
             <div id="chk-movil" class="checklist-item ko"><span class="check-icon">!</span><span>Móvil</span><b id="chk-movil-val">Sin verificar</b></div>
             <div id="chk-battery" class="checklist-item ko"><span class="check-icon">!</span><span>Batería</span><b id="chk-battery-val">Sin verificar</b></div>
             <div id="chk-sensors" class="checklist-item ko"><span class="check-icon">!</span><span>Sensor térmico</span><b id="chk-sensors-val">Sin verificar</b></div>
             <div id="chk-lora" class="checklist-item ko"><span class="check-icon">!</span><span>Enlace LoRa</span><b id="chk-lora-val">Sin verificar</b></div>
+            <div id="chk-aprs-lora" class="checklist-item ko"><span class="check-icon">!</span><span>LoRa APRS</span><b id="chk-aprs-lora-val">Sin verificar</b></div>
             <div class="check-actions"><button id="btn-test-systems" class="btn primary" onclick="runSelfTest()">PROBAR SISTEMAS</button></div>
           </div>
           <div class="check-column">
@@ -76,7 +77,7 @@
           <div class="telemetry-value"><span>RUMBO</span><strong id="mini-crs">--</strong></div><div class="telemetry-value"><span>TEMPERATURA</span><strong id="mini-temp">-- °C</strong></div>
           <div class="telemetry-value"><span>BATERÍA</span><strong id="mini-bat">--%</strong><i id="mini-bat-bar"></i></div><div class="telemetry-value wide"><span>POSICIÓN</span><strong id="mini-gps">Lat: -- · Lng: --</strong></div>
         </div>
-        <div class="detail-values"><span>Sonda: <b id="td-m-alt">--</b> m · <b id="td-m-lat">--</b>, <b id="td-m-lng">--</b> · <b id="td-m-sats">--</b> sat. · <b id="td-m-spd">--</b> · <b id="td-m-crs">--</b> · Batería <b id="td-m-bat">--</b></span><span>LoRa: <b id="td-l-alt">--</b> m · <b id="td-l-lat">--</b>, <b id="td-l-lng">--</b> · <b id="td-l-sats">--</b> sat. · <b id="td-l-spd">--</b> · <b id="td-l-crs">--</b></span><span id="sys-lora-signal">-- dBm</span></div>
+        <div class="detail-values"><span>Sonda: <b id="td-m-alt">--</b> m · <b id="td-m-lat">--</b>, <b id="td-m-lng">--</b> · <b id="td-m-sats">--</b> sat. · <b id="td-m-spd">--</b> · <b id="td-m-crs">--</b> · Batería <b id="td-m-bat">--</b></span><span>LoRa: <b id="td-l-alt">--</b> m · <b id="td-l-lat">--</b>, <b id="td-l-lng">--</b> · <b id="td-l-sats">--</b> sat. · <b id="td-l-spd">--</b> · <b id="td-l-crs">--</b></span><span id="sys-lora-signal">-- dBm</span><span>LoRa APRS {{ aprs_lora_device_id }}: <b id="td-aprs-position">Sin posición</b> · <b id="td-aprs-temperature">-- °C</b> · <b id="td-aprs-pressure">-- hPa</b></span></div>
       </article>
     </section>
 
@@ -92,13 +93,13 @@
   <div id="gps-debug-modal" class="modal" style="display:none"><div class="modal-content"><button onclick="closeGpsModal()">Cerrar</button><pre id="gps-modal-raw-json"></pre></div></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="{{ url_for('static', filename='js/state.js', v='20260807-19') }}"></script>
-  <script src="{{ url_for('static', filename='js/ui.js', v='20260816-01') }}"></script>
+  <script src="{{ url_for('static', filename='js/state.js', v='20260816-02') }}"></script>
+  <script src="{{ url_for('static', filename='js/ui.js', v='20260816-02') }}"></script>
   <script src="{{ url_for('static', filename='js/map.js', v='20260816-01') }}"></script>
-  <script src="{{ url_for('static', filename='js/telemetry.js', v='20260816-01') }}"></script>
-  <script src="{{ url_for('static', filename='js/checklist.js', v='20260816-01') }}"></script>
-  <script src="{{ url_for('static', filename='js/launch.js', v='20260816-01') }}"></script>
+  <script src="{{ url_for('static', filename='js/telemetry.js', v='20260816-02') }}"></script>
+  <script src="{{ url_for('static', filename='js/checklist.js', v='20260816-02') }}"></script>
+  <script src="{{ url_for('static', filename='js/launch.js', v='20260816-02') }}"></script>
   <script src="{{ url_for('static', filename='js/fotos.js', v='20260807-19') }}"></script>
-  <script src="{{ url_for('static', filename='js/main.js', v='20260816-01') }}"></script>
+  <script src="{{ url_for('static', filename='js/main.js', v='20260816-02') }}"></script>
 </body>
 </html>

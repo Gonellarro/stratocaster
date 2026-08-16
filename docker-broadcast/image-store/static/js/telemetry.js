@@ -120,6 +120,67 @@ function handleLoraTelemetry(data) {
 
 }
 
+function aprsValueIsPresent(value) {
+    return value !== undefined && value !== null && value !== 'null' && value !== '' && Number.isFinite(Number(value));
+}
+
+function aprsDataIsFresh(now = Date.now()) {
+    return aprsLoraData.positionUpdatedAt > 0 &&
+        aprsLoraData.temperatureUpdatedAt > 0 &&
+        aprsLoraData.pressureUpdatedAt > 0 &&
+        (now - aprsLoraData.positionUpdatedAt) <= APRS_DATA_MAX_AGE_MS &&
+        (now - aprsLoraData.temperatureUpdatedAt) <= APRS_DATA_MAX_AGE_MS &&
+        (now - aprsLoraData.pressureUpdatedAt) <= APRS_DATA_MAX_AGE_MS;
+}
+
+function aprsChecklistLabel() {
+    const temp = aprsValueIsPresent(aprsLoraData.temperature) ? `${Number(aprsLoraData.temperature).toFixed(1)}°C` : '-- °C';
+    const pressure = aprsValueIsPresent(aprsLoraData.pressure) ? `${Number(aprsLoraData.pressure).toFixed(1)} hPa` : '-- hPa';
+    return `Posición · ${temp} · ${pressure}`;
+}
+
+// EA2FMQ-8 publica por APRS la posición y los sensores en tramas distintas.
+// Conservamos el último valor fresco de cada grupo para que el control pueda
+// comprobar el conjunto, sin confundirlo con la telemetría de la sonda.
+function handleAprsLoraTelemetry(data) {
+    const now = Date.now();
+    aprsLoraData.lastSeen = now;
+
+    if (aprsValueIsPresent(data.lat) && aprsValueIsPresent(data.lng)) {
+        aprsLoraData.lat = Number(data.lat);
+        aprsLoraData.lng = Number(data.lng);
+        aprsLoraData.positionUpdatedAt = now;
+    }
+    if (aprsValueIsPresent(data.temperature_c)) {
+        aprsLoraData.temperature = Number(data.temperature_c);
+        aprsLoraData.temperatureUpdatedAt = now;
+    }
+    if (aprsValueIsPresent(data.pressure_hpa)) {
+        aprsLoraData.pressure = Number(data.pressure_hpa);
+        aprsLoraData.pressureUpdatedAt = now;
+    }
+
+    const position = document.getElementById('td-aprs-position');
+    const temperature = document.getElementById('td-aprs-temperature');
+    const pressure = document.getElementById('td-aprs-pressure');
+    if (position && aprsValueIsPresent(aprsLoraData.lat) && aprsValueIsPresent(aprsLoraData.lng)) {
+        position.textContent = `${aprsLoraData.lat.toFixed(5)}, ${aprsLoraData.lng.toFixed(5)}`;
+    }
+    if (temperature && aprsValueIsPresent(aprsLoraData.temperature)) {
+        temperature.textContent = `${aprsLoraData.temperature.toFixed(1)} °C`;
+    }
+    if (pressure && aprsValueIsPresent(aprsLoraData.pressure)) {
+        pressure.textContent = `${aprsLoraData.pressure.toFixed(1)} hPa`;
+    }
+
+    const receivedDuringTest = aprsLoraData.lastSeen >= aprsLoraTestStartedAt;
+    if (isSequenceRunning && receivedDuringTest && aprsDataIsFresh(now)) {
+        checks.aprs_lora = true;
+        updateChecklistUI('chk-aprs-lora', 'ok', aprsChecklistLabel());
+        logMessage('ok', 'LORA APRS', 'Posición, temperatura y presión recibidas de EA2FMQ-8.');
+    }
+}
+
 function handleCameraEvent(data) {
     // Refrescar feed de foto
     const img = document.getElementById('photo-feed');

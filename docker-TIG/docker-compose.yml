@@ -53,6 +53,24 @@ services:
     ports:
       - '8125:8125'
 
+  aprs-decoder:
+    build: ./aprs-decoder
+    container_name: aprs-decoder
+    restart: unless-stopped
+    environment:
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - MQTT_USER=${TELEGRAF_MQTT_USER}
+      - MQTT_PASSWORD=${TELEGRAF_MQTT_PASSWORD}
+      - APRS_RAW_TOPIC=sonda/lora/aprs/telemetry/+
+      - OUTPUT_TOPIC_PREFIX=sonda/lora
+      - MQTT_CLIENT_ID=aprs_decoder
+    depends_on:
+      - mosquitto
+    networks:
+      - default
+      - telemetry_net
+
   grafana:
     image: grafana/grafana:${GRAFANA_VERSION}
     container_name: grafana-server
@@ -79,4 +97,3 @@ networks:
   telemetry_net:
     external: true
     name: sonda_telemetry
-

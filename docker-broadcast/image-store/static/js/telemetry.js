@@ -217,8 +217,9 @@ function handleSondaEvent(data) {
         }
         logMessage('ok', 'MÓVIL', 'El móvil ha recibido la orden de diagnóstico.');
     } else if (data.status === 'gps_initializing') {
-        if (isSequenceRunning) updateChecklistUI('chk-gps', 'testing', 'Buscando satélites...');
-        logMessage('warn', 'GPS', 'Iniciando búsqueda activa de satélites GPS...');
+        const timeout = Number(data.timeout_seconds) || 45;
+        if (isSequenceRunning) updateChecklistUI('chk-gps', 'testing', `Buscando satélites (hasta ${timeout}s)...`);
+        logMessage('warn', 'GPS', `Iniciando búsqueda activa de satélites GPS (hasta ${timeout}s)...`);
     } else if (data.status === 'gps_ok') {
         // Siempre actualizar datos de telemetría en la UI
         if (data.lat !== undefined && data.lat !== null && data.lat !== 'null') {

@@ -68,6 +68,9 @@ RECOVERY_DATA_INTERVAL="${RECOVERY_DATA_INTERVAL:-60}"
 # como respaldo únicamente cuando no existe tal fix.
 GPS_MAX_ACCURACY_METERS="${GPS_MAX_ACCURACY_METERS:-75}"
 GPS_MAX_AGE_MS="${GPS_MAX_AGE_MS:-120000}"
+# Un receptor GNSS puede necesitar decenas de segundos para recuperar un fix,
+# especialmente tras arrancar o después de estar bajo techo.
+GPS_FIX_TIMEOUT_SECONDS="${GPS_FIX_TIMEOUT_SECONDS:-45}"
 
 # Función auxiliar para detener aplicaciones de vídeo en directo
 stop_video_apps() {
@@ -201,8 +204,10 @@ GPS_LOG="$STATE_DIR/gps_updates.json"
 rm -f "$GPS_LOG"
 
 # Iniciar el receptor GNSS explícitamente: sin -p gps Android puede entregar
-# una posición de red/fusionada de cientos de metros de error.
-termux-location -p gps -r updates > "$GPS_LOG" 2>/dev/null &
+# una posición de red/fusionada de cientos de metros de error. termux-location
+# imprime JSON multilínea; jq lo compacta a una línea por fix para poder leer
+# siempre el último objeto completo con tail -n 1.
+termux-location -p gps -r updates 2>/dev/null | jq -c --unbuffered . > "$GPS_LOG" &
 GPS_PID=$!
 
 # Liberar recursos y matar el proceso de GPS/MQTT al salir del script
@@ -247,6 +252,27 @@ get_gps_location() {
     else
         echo "$LOC_JSON"
     fi
+}
+
+# Espera de forma acotada a un fix GNSS válido. No acepta posiciones de red:
+# es preferible informar de que aún no hay fix antes que publicar una posición
+# desplazada cientos de metros.
+wait_for_gps_fix() {
+    local deadline now location_json
+    deadline=$(( $(date +%s) + GPS_FIX_TIMEOUT_SECONDS ))
+    while true; do
+        location_json=$(get_gps_location)
+        if [ "$location_json" != "{}" ]; then
+            echo "$location_json"
+            return 0
+        fi
+        now=$(date +%s)
+        if [ "$now" -ge "$deadline" ]; then
+            echo "{}"
+            return 1
+        fi
+        sleep 2
+    done
 }
 
 # Captura de Fase 4. Siempre conserva una copia local; solo intenta subirla
@@ -337,9 +363,8 @@ handle_command() {
         "init_gps")
             echo "[🛰️ GPS] Iniciando receptor GPS..."
             publish_ack "gps_test_started" "$command_id"
-            publish_mqtt "$TOPIC_STATUS" '{"status": "gps_initializing"}'
-            sleep 2
-            LOC_JSON=$(get_gps_location)
+            publish_mqtt "$TOPIC_STATUS" "$(jq -n --argjson timeout "$GPS_FIX_TIMEOUT_SECONDS" '{status:"gps_initializing", timeout_seconds:$timeout}')"
+            LOC_JSON=$(wait_for_gps_fix)
             if [ -n "$LOC_JSON" ] && [ "$LOC_JSON" != "{}" ]; then
                 LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
                 LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')

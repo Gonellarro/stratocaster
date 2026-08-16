@@ -33,7 +33,9 @@ const testSteps = [
         name: 'GPS Sonda',
         run: () => { sendCommand('init_gps'); },
         check: () => checks.gps,
-        timeout: 30000,
+        // El móvil puede requerir hasta 45 s para adquirir un fix GNSS. Se
+        // deja margen para que el acuse gps_ok llegue antes del timeout web.
+        timeout: 60000,
         retries: 1
     },
     {

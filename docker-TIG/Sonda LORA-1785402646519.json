@@ -94,7 +94,7 @@
               "longitude": "lng",
               "mode": "coords"
             },
-            "name": "Ruta ESP32 Lora",
+            "name": "Ruta ESP32 LoRa",
             "type": "route"
           },
           {
@@ -117,7 +117,7 @@
               "longitude": "lng",
               "mode": "coords"
             },
-            "name": "Puntos Lora",
+            "name": "Posiciones ESP32 LoRa",
             "tooltip": true,
             "type": "markers"
           },
@@ -144,6 +144,53 @@
             "name": "Fotos Móvil",
             "tooltip": true,
             "type": "markers"
+          },
+          {
+            "config": {
+              "style": {
+                "color": {
+                  "fixed": "#B6FF00"
+                },
+                "size": {
+                  "fixed": 3
+                }
+              }
+            },
+            "filterData": {
+              "id": "byRefId",
+              "options": "C"
+            },
+            "location": {
+              "latitude": "lat",
+              "longitude": "lng",
+              "mode": "coords"
+            },
+            "name": "Ruta LoRa APRS · EA2FMQ-8",
+            "type": "route"
+          },
+          {
+            "config": {
+              "style": {
+                "color": {
+                  "fixed": "#B6FF00"
+                },
+                "size": {
+                  "fixed": 6
+                }
+              }
+            },
+            "filterData": {
+              "id": "byRefId",
+              "options": "C"
+            },
+            "location": {
+              "latitude": "lat",
+              "longitude": "lng",
+              "mode": "coords"
+            },
+            "name": "Posiciones LoRa APRS · EA2FMQ-8",
+            "tooltip": true,
+            "type": "markers"
           }
         ],
         "tooltip": {
@@ -162,12 +209,16 @@
       "pluginVersion": "11.6.1",
       "targets": [
         {
-          "query": "from(bucket: \"telegraf_db\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"topic\"] == \"gps/data\" or r[\"subsystem\"] == \"lora\")\n  |> filter(fn: (r) => r[\"_field\"] == \"lat\" or r[\"_field\"] == \"lng\")\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with device_id: if exists r.device_id then r.device_id else \"LoRa (868MHz)\" }))\n  |> keep(columns: [\"_time\", \"lat\", \"lng\", \"device_id\"])",
+          "query": "from(bucket: \"telegraf_db\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"topic\"] == \"gps/data\" or (r[\"subsystem\"] == \"lora\" and (if exists r.device_id then r.device_id != \"EA2FMQ-8\" else true)))\n  |> filter(fn: (r) => r[\"_field\"] == \"lat\" or r[\"_field\"] == \"lng\")\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with device_id: if exists r.device_id then r.device_id else \"LoRa (868MHz)\" }))\n  |> keep(columns: [\"_time\", \"lat\", \"lng\", \"device_id\"])",
           "refId": "A"
         },
         {
           "query": "from(bucket: \"telegraf_db\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"topic\"] == \"sonda/camera\" or r[\"subsystem\"] == \"mobile\" and r[\"data_type\"] == \"camera\")\n  |> filter(fn: (r) => r[\"_field\"] == \"lat\" or r[\"_field\"] == \"lng\")\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> filter(fn: (r) => exists r.lat and exists r.lng)\n  |> map(fn: (r) => ({ r with device_id: if exists r.device_id then r.device_id else \"Móvil 4G\" }))\n  |> keep(columns: [\"_time\", \"lat\", \"lng\", \"device_id\"])",
           "refId": "B"
+        },
+        {
+          "query": "from(bucket: \"telegraf_db\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"topic\"] == \"sonda/lora/EA2FMQ-8/telemetry\")\n  |> filter(fn: (r) => r[\"_field\"] == \"lat\" or r[\"_field\"] == \"lng\")\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> filter(fn: (r) => exists r.lat and exists r.lng)\n  |> keep(columns: [\"_time\", \"lat\", \"lng\", \"device_id\"])",
+          "refId": "C"
         }
       ],
       "title": "Posición",
@@ -706,6 +757,102 @@
       ],
       "title": "Fotos y Análisis de la IA (Sonda)",
       "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb_ds"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "#B6FF00",
+            "mode": "fixed"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "showPoints": "auto"
+          },
+          "unit": "celsius"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 33
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "pluginVersion": "11.6.1",
+      "targets": [
+        {
+          "query": "from(bucket: \"telegraf_db\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"topic\"] == \"sonda/lora/EA2FMQ-8/telemetry\")\n  |> filter(fn: (r) => r[\"_field\"] == \"temperature_c\")\n  |> keep(columns: [\"_time\", \"_value\", \"device_id\"])",
+          "refId": "A"
+        }
+      ],
+      "title": "Temperatura · LoRa APRS EA2FMQ-8",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb_ds"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "#B6FF00",
+            "mode": "fixed"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "lineWidth": 2,
+            "showPoints": "auto"
+          },
+          "unit": "pressurehpa"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 33
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "pluginVersion": "11.6.1",
+      "targets": [
+        {
+          "query": "from(bucket: \"telegraf_db\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"topic\"] == \"sonda/lora/EA2FMQ-8/telemetry\")\n  |> filter(fn: (r) => r[\"_field\"] == \"pressure_hpa\")\n  |> keep(columns: [\"_time\", \"_value\", \"device_id\"])",
+          "refId": "A"
+        }
+      ],
+      "title": "Presión · LoRa APRS EA2FMQ-8",
+      "type": "timeseries"
     }
   ],
   "preload": false,
@@ -723,5 +870,5 @@
   "timezone": "browser",
   "title": "Sonda LORA",
   "uid": "efngceibqz9c0d",
-  "version": 5
+  "version": 8
 }

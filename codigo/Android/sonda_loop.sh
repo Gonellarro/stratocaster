@@ -221,7 +221,8 @@ is_usable_gps_fix() {
 }
 
 # Función auxiliar para leer la mejor localización disponible al instante sin bloquear.
-# El orden es deliberado: GPS reciente -> caché GPS -> red como último recurso.
+# Solo se acepta GPS GNSS reciente: una posición de red de 200 m puede situar
+# la sonda a cientos de metros y es peor que conservar la última posición buena.
 get_gps_location() {
     local LOC_JSON=""
     local TEMP_JSON=""
@@ -239,16 +240,8 @@ get_gps_location() {
             LOC_JSON="$TEMP_JSON"
         fi
     fi
-    # 3. Solo sin GPS válido: última posición de red para no dejar la
-    # telemetría vacía. Su accuracy se seguirá publicando al panel de control.
-    if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ]; then
-        TEMP_JSON=$(timeout 2 termux-location -p network -r last 2>/dev/null)
-        if [[ "$TEMP_JSON" == \{*\} ]]; then
-            LOC_JSON="$TEMP_JSON"
-        fi
-    fi
-    
-    # Asegurar que al menos devolvemos un JSON vacío válido
+    # Sin un fix GNSS válido devolvemos vacío. Los consumidores no moverán el
+    # marcador y mantendrán la última coordenada GPS conocida.
     if [ -z "$LOC_JSON" ] || [ "$LOC_JSON" = "{}" ] || [[ "$LOC_JSON" != \{*\} ]]; then
         echo "{}"
     else

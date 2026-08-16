@@ -1,4 +1,5 @@
-// Definición de Pasos del Secuenciador Pre-Vuelo
+// Solo las comprobaciones del MÓVIL son secuenciales: cada orden depende
+// de la respuesta anterior. Las dos radios se comprueban en paralelo.
 const testSteps = [
     {
         id: 'chk-movil',
@@ -8,28 +9,6 @@ const testSteps = [
         // El acuse status_received solo confirma que llegó la orden. El paso
         // termina cuando llega el diagnóstico completo (batería, sensor y GPS).
         timeout: 30000,
-        retries: 1,
-        critical: true
-    },
-    {
-        id: 'chk-lora',
-        name: 'Enlace LoRa',
-        // La radio transmite por cadencia propia: se exige una trama nueva
-        // recibida durante este autotest, no solo el estado visual previo.
-        run: () => {},
-        check: () => checks.lora_telemetria,
-        timeout: 120000,
-        retries: 1,
-        critical: true
-    },
-    {
-        id: 'chk-aprs-lora',
-        name: 'LoRa APRS (posición, temperatura y presión)',
-        // EA2FMQ-8 emite por su propia cadencia APRS. Se exige una trama
-        // nueva durante el autotest y los tres grupos de valores recientes.
-        run: () => {},
-        check: () => checks.aprs_lora,
-        timeout: 120000,
         retries: 1,
         critical: true
     },
@@ -67,12 +46,18 @@ const testSteps = [
     }
 ];
 
-// Orquestador de Autotest Secuencial
+// Orquestador: móvil secuencial + dos enlaces LoRa en paralelo.
 function runSelfTest() {
     if (isSequenceRunning) return;
     isSequenceRunning = true;
     loraTestStartedAt = Date.now();
     aprsLoraTestStartedAt = Date.now();
+    mobileChecksFinished = false;
+    mobileChecksPassed = false;
+    loraRadioCheckFinished = false;
+    aprsRadioCheckFinished = false;
+    clearTimeout(loraRadioCheckTimer);
+    clearTimeout(aprsRadioCheckTimer);
     
     // Resetear estados locales
     checks.movil = false;
@@ -100,22 +85,17 @@ function runSelfTest() {
         btn.disabled = true;
     }
 
-    logMessage('info', 'TEST', 'Iniciando secuencia de comprobación de sistemas paso a paso...');
+    logMessage('info', 'TEST', 'Iniciando móvil secuencial y comprobaciones LoRa en paralelo...');
+    startRadioChecks();
     executeCurrentStep();
 }
 
 function executeCurrentStep() {
     if (currentStepIndex >= testSteps.length) {
-        isSequenceRunning = false;
-        const btn = document.getElementById('btn-test-systems');
-        if (btn) {
-            btn.textContent = 'SISTEMAS COMPROBADOS';
-            btn.className = 'btn primary';
-            btn.disabled = false;
-        }
-        logMessage('ok', 'TEST', 'Pruebas técnicas completadas.');
-        tryApprovePreflight();
-        validateChecklist();
+        mobileChecksFinished = true;
+        mobileChecksPassed = true;
+        logMessage('ok', 'MÓVIL', 'Comprobaciones secuenciales del móvil completadas.');
+        finishSelfTestIfComplete();
         return;
     }
     
@@ -167,8 +147,6 @@ function handleStepSuccess() {
         } else {
             updateChecklistUI(step.id, 'ok', 'CONFIRMADO');
         }
-    } else if (step.id === 'chk-aprs-lora') {
-        updateChecklistUI(step.id, 'ok', aprsChecklistLabel());
     } else {
         updateChecklistUI(step.id, 'ok', 'CONFIRMADO');
     }
@@ -208,30 +186,77 @@ function handleStepTimeout() {
         logMessage('err', 'TEST', `${step.name} falló tras ${maxRetries} intentos.`);
         updateChecklistUI(step.id, 'ko', 'ERROR (KO)');
 
-        if (step.critical) {
-            stopSelfTestOnFailure();
-            return;
-        }
-        
-        // Un check sin respuesta no se puede dar por bueno ni saltar. Se
-        // detiene la secuencia para que el operador pueda reintentarla.
         stopSelfTestOnFailure();
     }
 }
 
 function stopSelfTestOnFailure() {
     clearTimeout(stepTimeoutTimer);
-    isSequenceRunning = false;
     stepAdvancing = false;
+    mobileChecksFinished = true;
+    mobileChecksPassed = false;
     preflightPassed = false;
     checklistPassed = false;
+    logMessage('err', 'MÓVIL', 'La secuencia móvil no se completó. Las comprobaciones LoRa continúan.');
+    finishSelfTestIfComplete();
+}
+
+function startRadioChecks() {
+    updateChecklistUI('chk-lora', 'testing', 'Esperando trama nueva...');
+    updateChecklistUI('chk-aprs-lora', 'testing', 'Esperando posición y sensores...');
+
+    loraRadioCheckTimer = setTimeout(() => completeRadioCheck('lora', false), 120000);
+    aprsRadioCheckTimer = setTimeout(() => completeRadioCheck('aprs', false), 120000);
+}
+
+function completeRadioCheck(kind, passed) {
+    const isLora = kind === 'lora';
+    if (isLora ? loraRadioCheckFinished : aprsRadioCheckFinished) return;
+
+    if (isLora) {
+        loraRadioCheckFinished = true;
+        clearTimeout(loraRadioCheckTimer);
+        if (passed) {
+            updateChecklistUI('chk-lora', 'ok', 'CONFIRMADO');
+            logMessage('ok', 'LORA', 'Enlace LoRa confirmado.');
+        } else {
+            checks.lora_telemetria = false;
+            updateChecklistUI('chk-lora', 'ko', 'ERROR (KO)');
+            logMessage('err', 'LORA', 'No se recibió una trama LoRa durante 2 minutos.');
+        }
+    } else {
+        aprsRadioCheckFinished = true;
+        clearTimeout(aprsRadioCheckTimer);
+        if (passed) {
+            updateChecklistUI('chk-aprs-lora', 'ok', aprsChecklistLabel());
+            logMessage('ok', 'LORA APRS', 'Posición, temperatura y presión confirmadas.');
+        } else {
+            checks.aprs_lora = false;
+            updateChecklistUI('chk-aprs-lora', 'ko', 'ERROR (KO)');
+            logMessage('err', 'LORA APRS', 'No se recibieron todos los datos APRS durante 2 minutos.');
+        }
+    }
+    finishSelfTestIfComplete();
+}
+
+function finishSelfTestIfComplete() {
+    if (!mobileChecksFinished || !loraRadioCheckFinished || !aprsRadioCheckFinished) return;
+
+    isSequenceRunning = false;
+    const passed = mobileChecksPassed && checks.movil && checks.battery && checks.sensors &&
+        checks.gps && checks.camera_foto && checks.lora_telemetria && checks.aprs_lora;
     const btn = document.getElementById('btn-test-systems');
     if (btn) {
-        btn.textContent = 'REINTENTAR COMPROBACIONES';
+        btn.textContent = passed ? 'SISTEMAS COMPROBADOS' : 'REINTENTAR COMPROBACIONES';
         btn.className = 'btn primary';
         btn.disabled = false;
     }
-    logMessage('err', 'TEST', 'La comprobación no se completó. Se detienen las comprobaciones restantes.');
+    if (passed) {
+        logMessage('ok', 'TEST', 'Todas las comprobaciones técnicas se han completado.');
+        tryApprovePreflight();
+    } else {
+        logMessage('err', 'TEST', 'Hay comprobaciones pendientes o fallidas. No se habilita el pre-vuelo.');
+    }
     validateChecklist();
 }
 

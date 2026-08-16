@@ -78,8 +78,9 @@ function handleMobileTelemetry(data) {
 
 function handleLoraTelemetry(data) {
     // 1. Actualizar estado de enlace y checklist de LoRa
-    if (isSequenceRunning && lastLoraPing >= loraTestStartedAt) {
+    if (isSequenceRunning && !loraRadioCheckFinished && lastLoraPing >= loraTestStartedAt) {
         checks.lora_telemetria = true;
+        completeRadioCheck('lora', true);
     }
     updateLinkState('lora', true);
 
@@ -174,10 +175,9 @@ function handleAprsLoraTelemetry(data) {
     }
 
     const receivedDuringTest = aprsLoraData.lastSeen >= aprsLoraTestStartedAt;
-    if (isSequenceRunning && receivedDuringTest && aprsDataIsFresh(now)) {
+    if (isSequenceRunning && !aprsRadioCheckFinished && receivedDuringTest && aprsDataIsFresh(now)) {
         checks.aprs_lora = true;
-        updateChecklistUI('chk-aprs-lora', 'ok', aprsChecklistLabel());
-        logMessage('ok', 'LORA APRS', 'Posición, temperatura y presión recibidas de EA2FMQ-8.');
+        completeRadioCheck('aprs', true);
     }
 }
 

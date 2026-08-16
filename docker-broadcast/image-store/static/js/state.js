@@ -43,6 +43,12 @@ let currentRetry = 0;
 let stepTimeoutTimer = null;
 let isSequenceRunning = false;
 let stepAdvancing = false;
+let mobileChecksFinished = false;
+let mobileChecksPassed = false;
+let loraRadioCheckFinished = false;
+let aprsRadioCheckFinished = false;
+let loraRadioCheckTimer = null;
+let aprsRadioCheckTimer = null;
 
 // Estructura de Misión
 let mission = {

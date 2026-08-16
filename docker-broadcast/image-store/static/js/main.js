@@ -90,7 +90,7 @@ client.on('message', (topic, message) => {
     }
     
     // Si la secuencia de autotest está activa, comprobar éxito del paso actual
-    if (isSequenceRunning) {
+    if (isSequenceRunning && !mobileChecksFinished) {
         const step = testSteps[currentStepIndex];
         if (step && step.check()) {
             handleStepSuccess();

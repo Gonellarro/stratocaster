@@ -182,21 +182,6 @@ function handleAprsLoraTelemetry(data) {
 }
 
 function handleCameraEvent(data) {
-    // Refrescar feed de foto
-    const img = document.getElementById('photo-feed');
-    if (img) {
-        img.src = '/images/last?t=' + Date.now(); // forzar refresco
-    }
-    const streamFrame = document.getElementById('video-stream');
-    if (streamFrame && !streamFrame.getAttribute('src')) {
-        streamFrame.src = (window.CONFIG && window.CONFIG.vdoViewUrl) || 'https://vdo.ninja/?view=sonda_stratocaster';
-    }
-    switchCameraTab('foto');
-    
-    const photoTimeEl = document.getElementById('photo-time');
-    if (photoTimeEl) {
-        photoTimeEl.textContent = 'Última foto (' + new Date().toLocaleTimeString() + '): ' + (data.texto || 'Captura de verificación de cámara (OK)');
-    }
     logMessage('ok', 'CÁMARA', 'Nueva foto recibida: "' + (data.texto || 'Captura de verificación de cámara (OK)') + '"');
     
     if (data.lat !== undefined && data.lat !== null && data.lat !== 'null' && data.lat !== 0) {
@@ -285,7 +270,8 @@ function handleSondaEvent(data) {
             streamBtn.textContent = '📹 INICIAR VÍDEO';
             streamBtn.className = 'btn btn-quick btn-accent';
         }
-        switchCameraTab('foto');
+        const streamFrame = document.getElementById('video-stream');
+        if (streamFrame) streamFrame.src = '';
         logMessage('info', 'VÍDEO', 'Transmisión de vídeo en directo detenida.');
     } else if (data.status === 'camera_testing') {
         logMessage('info', 'CÁMARA', 'Móvil procesando la captura de verificación...');

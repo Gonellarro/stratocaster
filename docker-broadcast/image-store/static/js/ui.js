@@ -103,26 +103,13 @@ function updateTestModeUI() {
 }
 
 function switchCameraTab(tabName) {
-    const tabFoto = document.getElementById('tab-foto');
-    const tabVideo = document.getElementById('tab-video');
-    const viewer = document.getElementById('camera-frame');
     const streamFrame = document.getElementById('video-stream');
-    
-    if (tabName === 'foto') {
-        if (tabFoto) tabFoto.className = 'camera-tab active';
-        if (tabVideo) tabVideo.className = 'camera-tab';
-        if (viewer) viewer.className = 'camera-viewer';
-        if (streamFrame) streamFrame.src = ""; // limpiar para no consumir datos
-    } else {
-        if (tabFoto) tabFoto.className = 'camera-tab';
-        if (tabVideo) tabVideo.className = 'camera-tab active';
-        if (viewer) viewer.className = 'camera-viewer video-mode';
-        
-        // Asignar el stream WebRTC local/P2P matching el ID de la sonda
-        if (streamFrame) {
-            const vdoUrl = (window.CONFIG && window.CONFIG.vdoViewUrl) || 'https://vdo.ninja/?view=sonda_stratocaster';
-            streamFrame.src = vdoUrl;
-        }
+    // La consola ya no muestra fotografías. Se conserva esta función porque
+    // la usan los eventos de cámara, pero solo actúa sobre el visor de vídeo.
+    if (tabName !== 'video' || !streamFrame) return;
+    const vdoUrl = (window.CONFIG && window.CONFIG.vdoViewUrl) || 'https://vdo.ninja/?view=sonda_stratocaster';
+    if (streamFrame.src !== vdoUrl) {
+        streamFrame.src = vdoUrl;
     }
 }
 

@@ -182,6 +182,18 @@ function handleAprsLoraTelemetry(data) {
 }
 
 function handleCameraEvent(data) {
+    const img = document.getElementById('photo-feed');
+    if (img) {
+        const imageUrl = data.url_imagen || '/images/last';
+        const separator = imageUrl.includes('?') ? '&' : '?';
+        img.src = imageUrl + separator + 't=' + Date.now();
+    }
+    const photoTimeEl = document.getElementById('photo-time');
+    if (photoTimeEl) {
+        photoTimeEl.textContent = 'Foto recibida a las ' + new Date().toLocaleTimeString() + ': ' +
+            (data.texto || 'Captura de la sonda');
+    }
+    switchCameraTab('foto');
     logMessage('ok', 'CÁMARA', 'Nueva foto recibida: "' + (data.texto || 'Captura de verificación de cámara (OK)') + '"');
     
     if (data.lat !== undefined && data.lat !== null && data.lat !== 'null' && data.lat !== 0) {

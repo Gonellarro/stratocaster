@@ -103,13 +103,25 @@ function updateTestModeUI() {
 }
 
 function switchCameraTab(tabName) {
+    const tabFoto = document.getElementById('tab-foto');
+    const tabVideo = document.getElementById('tab-video');
+    const viewer = document.getElementById('camera-frame');
     const streamFrame = document.getElementById('video-stream');
-    // La consola ya no muestra fotografías. Se conserva esta función porque
-    // la usan los eventos de cámara, pero solo actúa sobre el visor de vídeo.
-    if (tabName !== 'video' || !streamFrame) return;
-    const vdoUrl = (window.CONFIG && window.CONFIG.vdoViewUrl) || 'https://vdo.ninja/?view=sonda_stratocaster';
-    if (streamFrame.src !== vdoUrl) {
-        streamFrame.src = vdoUrl;
+
+    if (tabName === 'foto') {
+        if (tabFoto) tabFoto.className = 'camera-tab active';
+        if (tabVideo) tabVideo.className = 'camera-tab';
+        if (viewer) viewer.className = 'camera-viewer';
+        // La foto no necesita mantener la conexión de vídeo abierta.
+        if (streamFrame) streamFrame.src = '';
+    } else {
+        if (tabFoto) tabFoto.className = 'camera-tab';
+        if (tabVideo) tabVideo.className = 'camera-tab active';
+        if (viewer) viewer.className = 'camera-viewer video-mode';
+        if (streamFrame) {
+            const vdoUrl = (window.CONFIG && window.CONFIG.vdoViewUrl) || 'https://vdo.ninja/?view=sonda_stratocaster';
+            if (streamFrame.src !== vdoUrl) streamFrame.src = vdoUrl;
+        }
     }
 }
 

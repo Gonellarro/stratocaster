@@ -621,16 +621,14 @@
         const isDomain = /[a-zA-Z]/.test(serverIP);
         const useSSL = urlParams.get('ssl') === 'true' || isDomain || window.location.protocol === 'https:';
         const wsProtocol = useSSL ? 'wss:' : 'ws:';
-        const httpProtocol = useSSL ? 'https:' : 'http:';
 
         // Si es un dominio (SSL activo), conectamos al proxy de WebSockets en /mqtt (puerto 443).
         // Si es una IP local (sin SSL), conectamos al puerto 9001 directo.
         const mqttUrl = useSSL ? `${wsProtocol}//${serverIP}/mqtt` : `${wsProtocol}//${serverIP}:${mqttPort}`;
-        const restUrl = useSSL ? `${httpProtocol}//${serverIP}/control_lanzamiento` : `${httpProtocol}//${serverIP}:5000/control_lanzamiento`;
-
         const mqttUser = urlParams.get('mqtt_user') || '';
         const mqttPass = urlParams.get('mqtt_pass') || '';
         const targetDeviceID = urlParams.get('device_id') || 'movil_sonda_1';
+        const missionStateTopic = `sonda/mission/${targetDeviceID}/state`;
 
         let client = null;
         let lastMessageTime = 0;
@@ -644,6 +642,7 @@
         // Estado del cronómetro de vuelo
         let launchTime = null;
         let flightTimerInterval = null;
+        let countdownTimerInterval = null;
 
         // 1. Conectar a MQTT
         try {
@@ -660,6 +659,8 @@
                 client.subscribe(`sonda/mobile/${targetDeviceID}/telemetry`);
                 // Suscribirse a la telemetría de radio LoRa (cualquier ID)
                 client.subscribe('sonda/lora/+/telemetry');
+                // Estado retained de la misión: activa la cuenta atrás del HUD.
+                client.subscribe(missionStateTopic, { qos: 1 });
             });
 
             client.on('message', (topic, message) => {
@@ -674,7 +675,9 @@
 
                 const topicParts = topic.split('/');
 
-                if (topic === `sonda/mobile/${targetDeviceID}/status`) {
+                if (topic === missionStateTopic) {
+                    handleMissionState(payload);
+                } else if (topic === `sonda/mobile/${targetDeviceID}/status`) {
                     lastMobilePing = Date.now();
                     handleSondaStatus(payload);
                 } else if (topic === `sonda/mobile/${targetDeviceID}/camera`) {
@@ -850,74 +853,89 @@
             // El mensaje de foto se visualiza en el Dashboard web, no en el HUD de OBS
         }
 
-        // 6. Consultar estado en REST API
-        let lastAltitudeTime = null;
-        setInterval(() => {
-            fetch(restUrl)
-                .then(res => res.json())
-                .then(data => {
-                    const timerPrefix = document.getElementById('timer-prefix');
-                    const timerVal = document.getElementById('timer-val');
-                    const countdownOverlay = document.getElementById('countdown-overlay');
-                    const countdownOverlayNumber = document.getElementById('countdown-overlay-number');
-                    const timerContainer = document.querySelector('.timer-container');
-                    
-                    // Control de la visibilidad del reloj central (solo visible en cuenta atrás o lanzado)
-                    if (timerContainer) {
-                        if (data.estado === 'cuenta_atras' || data.estado === 'lanzado') {
-                            timerContainer.style.display = 'flex';
-                        } else {
-                            timerContainer.style.display = 'none';
-                        }
-                    }
+        // 6. Estado de misión recibido por MQTT. No depende de REST ni de CORS.
+        function handleMissionState(data) {
+            const state = data.estado;
+            const countdownStartMs = Number(data.timestamp_inicio) * 1000;
+            const countdownDurationMs = Number(data.duracion_cuenta_atras || 10) * 1000;
 
-                    // Control del estado de la cuenta atrás
-                    if (data.estado === 'cuenta_atras') {
-                        // Parar cronómetro si existiera
-                        stopFlightTimer();
+            if (!state) return;
 
-                        timerPrefix.textContent = 'T-';
-                        timerPrefix.className = 'timer-prefix prefix-countdown';
-                        timerVal.className = 'timer-val countdown';
-                        
-                        // Formatear segundos en formato MM:SS
-                        const sec = data.tiempo_restante;
-                        timerVal.textContent = `00:00:${sec < 10 ? '0' + sec : sec}`;
-                        
-                        // Mostrar overlay y actualizar número gigante
-                        if (countdownOverlay && countdownOverlayNumber) {
-                            countdownOverlay.style.display = 'flex';
-                            countdownOverlayNumber.textContent = sec;
-                        }
+            if (state === 'cuenta_atras' && Number.isFinite(countdownStartMs) && countdownStartMs > 0) {
+                stopFlightTimer();
+                startCountdown(countdownStartMs, countdownDurationMs);
+                return;
+            }
 
-                    } else {
-                        // Ocultar overlay
-                        if (countdownOverlay) {
-                            countdownOverlay.style.display = 'none';
-                        }
+            stopCountdown();
+            const countdownOverlay = document.getElementById('countdown-overlay');
+            const timerContainer = document.querySelector('.timer-container');
+            const timerPrefix = document.getElementById('timer-prefix');
+            const timerVal = document.getElementById('timer-val');
 
-                        if (data.estado === 'lanzado') {
-                            timerPrefix.textContent = 'T+';
-                            timerPrefix.className = 'timer-prefix prefix-flight';
-                            timerVal.className = 'timer-val flight';
+            if (countdownOverlay) countdownOverlay.style.display = 'none';
+            if (state === 'lanzado') {
+                const publishedLaunchMs = Number(data.timestamp_lanzamiento) * 1000;
+                launchTime = Number.isFinite(publishedLaunchMs) && publishedLaunchMs > 0
+                    ? publishedLaunchMs
+                    : countdownStartMs + countdownDurationMs;
+                if (timerContainer) timerContainer.style.display = 'flex';
+                timerPrefix.textContent = 'T+';
+                timerPrefix.className = 'timer-prefix prefix-flight';
+                timerVal.className = 'timer-val flight';
+                startFlightTimer();
+            } else {
+                stopFlightTimer();
+                if (timerContainer) timerContainer.style.display = 'none';
+                timerPrefix.textContent = 'T-';
+                timerPrefix.className = 'timer-prefix prefix-countdown';
+                timerVal.className = 'timer-val countdown';
+                timerVal.textContent = '00:00:10';
+            }
+        }
 
-                            // Iniciar cronómetro ascendente en tiempo real desde el timestamp de inicio
-                            if (launchTime === null) {
-                                launchTime = data.timestamp_inicio * 1000; // Milisegundos
-                                startFlightTimer();
-                            }
-                        } else {
-                            // En espera / Abortado / Armando
-                            stopFlightTimer();
-                            timerPrefix.textContent = 'T-';
-                            timerPrefix.className = 'timer-prefix prefix-countdown';
-                            timerVal.className = 'timer-val countdown';
-                            timerVal.textContent = '00:00:10';
-                        }
-                    }
-                })
-                .catch(err => console.error('Error al consultar REST:', err));
-        }, 1000);
+        function startCountdown(startMs, durationMs) {
+            const timerContainer = document.querySelector('.timer-container');
+            const timerPrefix = document.getElementById('timer-prefix');
+            const timerVal = document.getElementById('timer-val');
+            const countdownOverlay = document.getElementById('countdown-overlay');
+            const countdownOverlayNumber = document.getElementById('countdown-overlay-number');
+
+            stopCountdown();
+            if (timerContainer) timerContainer.style.display = 'flex';
+            timerPrefix.textContent = 'T-';
+            timerPrefix.className = 'timer-prefix prefix-countdown';
+            timerVal.className = 'timer-val countdown';
+            if (countdownOverlay) countdownOverlay.style.display = 'flex';
+
+            const render = () => {
+                const seconds = Math.max(0, Math.ceil((startMs + durationMs - Date.now()) / 1000));
+                timerVal.textContent = `00:00:${String(seconds).padStart(2, '0')}`;
+                if (countdownOverlayNumber) countdownOverlayNumber.textContent = seconds;
+
+                // El mensaje MQTT "lanzado" será la confirmación del servidor.
+                // Esta transición local evita que el rótulo se quede congelado en T-0.
+                if (seconds === 0) {
+                    stopCountdown();
+                    if (countdownOverlay) countdownOverlay.style.display = 'none';
+                    launchTime = startMs + durationMs;
+                    timerPrefix.textContent = 'T+';
+                    timerPrefix.className = 'timer-prefix prefix-flight';
+                    timerVal.className = 'timer-val flight';
+                    startFlightTimer();
+                }
+            };
+
+            render();
+            countdownTimerInterval = setInterval(render, 100);
+        }
+
+        function stopCountdown() {
+            if (countdownTimerInterval !== null) {
+                clearInterval(countdownTimerInterval);
+                countdownTimerInterval = null;
+            }
+        }
 
         // --- FUNCIONES AUXILIARES DE NAVEGACIÓN Y GEOMETRÍA ---
 

@@ -120,12 +120,14 @@ def logout():
 STATE_FILE = os.environ.get('LAUNCH_STATE_FILE', '/data/launch_state.json')
 COUNTDOWN_SECONDS = 10
 MOBILE_HEARTBEAT_TIMEOUT = int(os.environ.get('MOBILE_HEARTBEAT_TIMEOUT', '20'))
+launch_state_lock = threading.RLock()
 
 DEFAULT_STATE = {
     'mission_id': '',
     'estado': 'espera',
     'tiempo_restante': 0,
     'timestamp_inicio': 0.0,
+    'timestamp_lanzamiento': 0.0,
     'timestamp_mision': 0.0,
     'preflight_passed': False,
     'video_confirmed': False,
@@ -139,6 +141,40 @@ DEFAULT_STATE = {
     'mobile_last_status': '',
     'mobile_last_payload': {},
 }
+
+def mission_state_topic():
+    """Topic retenido que consume el HUD de realización para cada sonda."""
+    return f'sonda/mission/{DEVICE_ID}/state'
+
+def publish_mission_state(state):
+    """Publica el estado visual de misión para HUDs, sin afectar al lanzamiento.
+
+    El mensaje retained permite que una fuente de navegador de OBS que se
+    reconecte durante la cuenta atrás reciba el estado actual de inmediato.
+    """
+    if mqtt_publish is None or not MQTT_HOST:
+        app.logger.error('No se puede publicar el estado HUD: falta paho-mqtt o MQTT_HOST')
+        return False
+    payload = json.dumps({
+        'estado': state.get('estado', 'espera'),
+        'timestamp_inicio': state.get('timestamp_inicio', 0.0),
+        'timestamp_lanzamiento': state.get('timestamp_lanzamiento', 0.0),
+        'duracion_cuenta_atras': COUNTDOWN_SECONDS,
+        'mission_id': state.get('mission_id', ''),
+    })
+    try:
+        mqtt_publish.single(
+            mission_state_topic(), payload=payload,
+            hostname=MQTT_HOST, port=MQTT_PORT,
+            auth={'username': MQTT_USER, 'password': MQTT_PASS} if MQTT_USER else None,
+            qos=1, retain=True, keepalive=10,
+        )
+        app.logger.info('Estado HUD publicado: estado=%s topic=%s',
+                        state.get('estado'), mission_state_topic())
+        return True
+    except Exception as exc:
+        app.logger.error('Error publicando estado HUD: %s', exc)
+        return False
 
 def load_launch_state():
     default_state = dict(DEFAULT_STATE)
@@ -296,25 +332,47 @@ def normalize_photo_orientation(filepath):
     except (UnidentifiedImageError, OSError) as exc:
         app.logger.warning('No se pudo normalizar la orientación de %s: %s', filepath, exc)
 
+def complete_countdown_if_due(expected_start=None):
+    """Cierra la cuenta atrás una única vez y anuncia el lanzamiento por MQTT."""
+    with launch_state_lock:
+        state = load_launch_state()
+        if state.get('estado') != 'cuenta_atras':
+            return state
+        if expected_start is not None and state.get('timestamp_inicio') != expected_start:
+            return state
+
+        elapsed = time.time() - state.get('timestamp_inicio', 0.0)
+        if elapsed < COUNTDOWN_SECONDS:
+            return state
+
+        state['estado'] = 'lanzado'
+        state['tiempo_restante'] = 0
+        state['timestamp_lanzamiento'] = time.time()
+        command_id = uuid.uuid4().hex
+        state['last_command_id'] = command_id
+        state['last_event'] = 'Cuenta atrás completada; orden de lanzamiento enviada'
+        save_launch_state(state)
+        publish_mission_state(state)
+        publish_command('launch', command_id)
+        return state
+
+def schedule_countdown_completion(started_at):
+    """Evita depender del sondeo del dashboard para completar la secuencia."""
+    timer = threading.Timer(COUNTDOWN_SECONDS, complete_countdown_if_due, args=(started_at,))
+    timer.daemon = True
+    timer.start()
+
 def update_countdown_state():
     """Calcula dinámicamente el tiempo restante de la cuenta atrás."""
-    state = load_launch_state()
-    if state.get('estado') == 'cuenta_atras':
-        elapsed = time.time() - state.get('timestamp_inicio', 0.0)
-        remaining = COUNTDOWN_SECONDS - int(elapsed)
-        if remaining <= 0:
-            state['estado'] = 'lanzado'
-            state['tiempo_restante'] = 0
-            command_id = uuid.uuid4().hex
-            state['last_command_id'] = command_id
-            state['last_event'] = 'Cuenta atrás completada; orden de lanzamiento enviada'
-            save_launch_state(state)
-            publish_command('launch', command_id)
-        else:
+    with launch_state_lock:
+        state = complete_countdown_if_due()
+        if state.get('estado') == 'cuenta_atras':
+            elapsed = time.time() - state.get('timestamp_inicio', 0.0)
+            remaining = COUNTDOWN_SECONDS - int(elapsed)
             if state.get('tiempo_restante') != remaining:
                 state['tiempo_restante'] = remaining
                 save_launch_state(state)
-    return state
+        return state
 
 @app.route('/control_lanzamiento', methods=['GET'])
 def get_launch_status():
@@ -371,6 +429,7 @@ def change_launch_status():
         state['estado'] = 'armando'
         state['tiempo_restante'] = 0
         state['timestamp_inicio'] = 0.0
+        state['timestamp_lanzamiento'] = 0.0
         state['timestamp_mision'] = 0.0
         state['mission_id'] = data.get('mission_id') or f"MISIÓN_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
         command_id = uuid.uuid4().hex
@@ -393,6 +452,7 @@ def change_launch_status():
         now = time.time()
         state['estado'] = 'cuenta_atras'
         state['timestamp_inicio'] = now
+        state['timestamp_lanzamiento'] = 0.0
         state['timestamp_mision'] = now
         state['tiempo_restante'] = COUNTDOWN_SECONDS
         state['last_event'] = (
@@ -411,6 +471,7 @@ def change_launch_status():
         state['estado'] = 'espera'
         state['tiempo_restante'] = 0
         state['timestamp_inicio'] = 0.0
+        state['timestamp_lanzamiento'] = 0.0
         state['timestamp_mision'] = 0.0
         state['preflight_passed'] = False
         state['video_confirmed'] = False
@@ -437,6 +498,9 @@ def change_launch_status():
         return reject('Acción desconocida')
 
     save_launch_state(state)
+    publish_mission_state(state)
+    if action == 'ok':
+        schedule_countdown_completion(state['timestamp_inicio'])
     return jsonify(state)
 
 @app.route('/control_lanzamiento/ack', methods=['POST'])

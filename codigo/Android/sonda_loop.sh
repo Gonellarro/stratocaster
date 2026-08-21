@@ -3,8 +3,8 @@
 # ==============================================================================
 # ORQUESTRADOR MULTI-FASE SIMPLIFICADO DE LA SONDA (STRATOCASTER)
 # Fase 0: Pruebas y Espera en Rampa
-# Fase 1: Vuelo en Directo (Streaming SRT)
-# Fase 2: Bucle Autónomo de Transmisión Directa (Captura y GPS)
+# Fase 1: Vuelo en Directo (vídeo y telemetría MQTT)
+# La recuperación queda reservada a una orden explícita del control.
 # ==============================================================================
 
 # Cargar variables de entorno y credenciales privadas desde 'sonda.env' si existe
@@ -602,11 +602,11 @@ rm -f "$ARMED_FLAG"
 rm -f "$ABORT_FLAG"
 
 # ==============================================================================
-# FASE 1: VUELO EN DIRECTO (STREAMING Y MONITOREO DE ALTITUD)
+# FASE 1: VUELO EN DIRECTO (VÍDEO Y TELEMETRÍA MQTT)
 # ==============================================================================
 echo "====================================================="
 echo "  [FASE 1] ¡IGNICIÓN! Sonda en vuelo."
-echo "  Transmitiendo vídeo en directo y telemetría de rampa..."
+echo "  Transmitiendo vídeo en directo y telemetría continua..."
 echo "====================================================="
 
 # Arrancar el vídeo en directo de forma automática en el despegue (cámara trasera, autostart, sin audio y bitrate controlado)
@@ -614,8 +614,6 @@ touch "$VIDEO_FLAG"
 am start -a android.intent.action.VIEW -d "$VDO_NINJA_URL" &>/dev/null
 sleep 2
 
-START_TIME=$(date +%s)
-TIMEOUT_SAFETY=600
 LAST_CONNECTIVITY_CHECK_AT=0
 LAST_OFFLINE_TELEMETRY_AT=0
 COBERTURA=-1
@@ -654,12 +652,6 @@ while true; do
     # Sin cobertura no se despierta el GPS cada 5 s: se mantiene el sondeo de
     # red cada 15 s, pero la medición y el intento MQTT se reducen a 60 s.
     if [ "$COBERTURA" -eq 0 ] && [ $((NOW - LAST_OFFLINE_TELEMETRY_AT)) -lt "$OFFLINE_TELEMETRY_INTERVAL" ]; then
-        CURRENT_TIME="$NOW"
-        ELAPSED=$((CURRENT_TIME - START_TIME))
-        if [ "$ELAPSED" -gt "$TIMEOUT_SAFETY" ]; then
-            echo "[⚠️ SEGURIDAD] Límite de tiempo de vídeo agotado ($TIMEOUT_SAFETY s). Entrando en Fase Autónoma..."
-            break
-        fi
         sleep 5
         continue
     fi
@@ -672,13 +664,23 @@ while true; do
     ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
     ACC=$(echo "$LOC_JSON" | jq -r '.accuracy // "null"')
 
-    # Preparar telemetría aunque todavía no exista fix GPS.
+    # Preparar telemetría aunque todavía no exista fix GPS. La batería y la
+    # temperatura viajan en el mismo topic para que Grafana tenga una fuente
+    # de telemetría de vuelo única (sin depender del topic de diagnóstico).
+    BAT_STATUS=$(termux-battery-status 2>/dev/null || true)
+    BAT_LEVEL=$(echo "$BAT_STATUS" | jq -r '.percentage // 0' 2>/dev/null || echo 0)
+    BAT_TEMP=$(echo "$BAT_STATUS" | jq -r '.temperature // 0' 2>/dev/null || echo 0)
+    [[ "$BAT_LEVEL" =~ ^[0-9]+([.][0-9]+)?$ ]] || BAT_LEVEL=0
+    [[ "$BAT_TEMP" =~ ^-?[0-9]+([.][0-9]+)?$ ]] || BAT_TEMP=0
+
     GPS_PAYLOAD=$(jq -n \
       --argjson lat "$LAT" \
       --argjson lng "$LNG" \
       --argjson alt "$ALT" \
       --argjson acc "$ACC" \
-      '{lat: $lat, lng: $lng, altitude: $alt, accuracy: $acc}')
+      --argjson level "$BAT_LEVEL" \
+      --argjson temp "$BAT_TEMP" \
+      '{lat: $lat, lng: $lng, altitude: $alt, accuracy: $acc, level: $level, temp: $temp}')
 
     if [ "$COBERTURA" -eq 1 ]; then
         # Con red: telemetría normal cada ciclo (5 s). El sondeo MQTT de los
@@ -691,226 +693,6 @@ while true; do
         LAST_OFFLINE_TELEMETRY_AT="$NOW"
         echo "[📡 TELEMETRÍA] Sin red: intento reducido (cada ${OFFLINE_TELEMETRY_INTERVAL}s)."
     fi
-    
-    ALT_INT=${ALT%.*}
-    if [ -n "$ALT_INT" ] && [ "$ALT_INT" != "null" ]; then
-        if [ "$ALT_INT" -gt 1000 ]; then
-            echo "[🚀 CONTROL] ¡Cota de 1.000m superada! ($ALT_INT m). Entrando en Fase Autónoma..."
-            break
-        fi
-    fi
-    
-    CURRENT_TIME=$(date +%s)
-    ELAPSED=$((CURRENT_TIME - START_TIME))
-    if [ $ELAPSED -gt $TIMEOUT_SAFETY ]; then
-        echo "[⚠️ SEGURIDAD] Límite de tiempo de vídeo agotado ($TIMEOUT_SAFETY s). Entrando en Fase Autónoma..."
-        break
-    fi
-    
-    sleep 5
-done
-
-# Detener retransmisión de vídeo
-stop_video_apps
-sleep 2
-
-# ==============================================================================
-# FASE 2: CAPTURA DE IMÁGENES AUTÓNOMA Y TELEMETRÍA (INTELIGENTE)
-# ==============================================================================
-echo "====================================================="
-echo "  [FASE 2] Iniciando bucle de captura autónoma inteligente..."
-echo "  Destino de capturas locales: $PHOTO_DIR"
-echo "  Telemetría cada 5s | Fotos cada 60s (si hay cobertura)"
-echo "====================================================="
-
-VIDEO_RUNNING=0
-CICLO=0
-PHOTO_INTERVAL=60  # Intervalo de fotos en segundos
-PHOTO_CYCLES=$((PHOTO_INTERVAL / 5))
-if [ "$PHOTO_CYCLES" -lt 1 ]; then PHOTO_CYCLES=1; fi
-
-# Detección local de aterrizaje: requiere descenso previo, velocidad baja y
-# altitud estable durante varios minutos. Funciona aunque no haya cobertura.
-MAX_ALTITUDE=0
-DESCENT_DETECTED=0
-LAST_ALTITUDE=""
-LOW_MOTION_CYCLES=0
-LANDING_STABLE_CYCLES=36
-LAST_LANDING_STATUS_AT=0
-
-while true; do
-    if [ -f "$RECOVERY_FLAG" ]; then
-        enter_recovery_mode
-    fi
-    if [ -f "$ABORT_FLAG" ]; then
-        rm -f "$ABORT_FLAG" "$LANDING_FLAG"
-        stop_recovery_audio
-        stop_video_apps
-        exec "$0" "$@"
-    fi
-    # 1. Comprobar conectividad periódicamente, no en cada ciclo de GPS.
-    NOW=$(date +%s)
-    if [ $((NOW - LAST_CONNECTIVITY_CHECK_AT)) -ge "$CONNECTIVITY_CHECK_INTERVAL" ]; then
-        if mqtt_connection_available; then
-            if [ "$COBERTURA" -ne 1 ]; then
-                echo "[🛰️ NET] MQTT confirmado. Activando perfil normal."
-            fi
-            COBERTURA=1
-        else
-            if [ "$COBERTURA" -ne 0 ]; then
-                echo "[🛰️ NET] MQTT no disponible. Activando perfil de bajo consumo."
-            fi
-            COBERTURA=0
-        fi
-        LAST_CONNECTIVITY_CHECK_AT="$NOW"
-    fi
-
-    # Geolocalizar (leído en cada ciclo de 5s)
-    LAT="null"
-    LNG="null"
-    ALT="null"
-    ACC="null"
-    LOC_JSON=$(get_gps_location)
-    if [ -n "$LOC_JSON" ] && [ "$LOC_JSON" != "{}" ]; then
-        LAT=$(echo "$LOC_JSON" | jq -r '.latitude // "null"')
-        LNG=$(echo "$LOC_JSON" | jq -r '.longitude // "null"')
-        ALT=$(echo "$LOC_JSON" | jq -r '.altitude // "null"')
-        ACC=$(echo "$LOC_JSON" | jq -r '.accuracy // "null"')
-    fi
-
-    ALT_NUM=$(awk "BEGIN { if (\"$ALT\" == \"null\") print 0; else print $ALT + 0 }")
-    PREVIOUS_MAX_ALTITUDE="$MAX_ALTITUDE"
-    if awk "BEGIN { exit !($ALT_NUM > $MAX_ALTITUDE) }"; then
-        MAX_ALTITUDE="$ALT_NUM"
-    fi
-    if awk "BEGIN { exit !($PREVIOUS_MAX_ALTITUDE > 1000 && $ALT_NUM < ($PREVIOUS_MAX_ALTITUDE - 50)) }"; then
-        DESCENT_DETECTED=1
-    fi
-    SPEED_NUM=$(echo "$LOC_JSON" | jq -r '.speed // 999' 2>/dev/null)
-    if [ "$SPEED_NUM" = "null" ] || ! [[ "$SPEED_NUM" =~ ^[0-9]+([.][0-9]+)?$ ]]; then SPEED_NUM=999; fi
-    if [ -z "$LAST_ALTITUDE" ]; then
-        ALT_STEP=999
-    else
-        ALT_STEP=$(awk "BEGIN { d=$ALT_NUM-$LAST_ALTITUDE; if (d<0) d=-d; print d }")
-    fi
-    LAST_ALTITUDE="$ALT_NUM"
-    if awk "BEGIN { exit !($DESCENT_DETECTED == 1 && $ALT_STEP < 15 && $SPEED_NUM < 3) }"; then
-        LOW_MOTION_CYCLES=$((LOW_MOTION_CYCLES + 1))
-    else
-        LOW_MOTION_CYCLES=0
-    fi
-    if [ "$LOW_MOTION_CYCLES" -ge "$LANDING_STABLE_CYCLES" ] && [ ! -f "$LANDING_FLAG" ]; then
-        touch "$LANDING_FLAG"
-        touch "$RECOVERY_FLAG"
-        publish_mqtt "$TOPIC_STATUS" "$(jq -n --argjson alt "$ALT_NUM" '{status: "landed", alt: $alt, alarm: "starting"}')"
-        if start_recovery_audio; then
-            publish_ack "recovery_alarm_started"
-        else
-            publish_ack "recovery_alarm_missing_audio"
-        fi
-    fi
-
-    # 2. Gestión dinámica de conectividad en vuelo
-    if [ "$COBERTURA" -eq 1 ]; then
-        # Si aterrizó sin cobertura, repetir periódicamente el evento hasta
-        # que la consola pueda pasar a recuperación.
-        if [ -f "$LANDING_FLAG" ]; then
-            NOW=$(date +%s)
-            if [ $((NOW - LAST_LANDING_STATUS_AT)) -ge 60 ]; then
-                publish_mqtt "$TOPIC_STATUS" "$(jq -n --argjson alt "$ALT_NUM" '{status: "landed", alt: $alt, alarm: "active"}')" true
-                LAST_LANDING_STATUS_AT="$NOW"
-            fi
-        fi
-        # Con cobertura: Si el vídeo estaba apagado, lo encendemos para el directo
-        if [ "$VIDEO_RUNNING" -eq 0 ]; then
-            echo "[🛰️ NET] Conexión recuperada. Reanudando vídeo en directo..."
-            am start -a android.intent.action.VIEW -d "$VDO_NINJA_URL" &>/dev/null
-            VIDEO_RUNNING=1
-            publish_mqtt "$TOPIC_STATUS" '{"status": "video_streaming_on", "reason": "connection_recovered"}'
-            sleep 2
-        fi
-
-        # Enviar telemetría continua de alta velocidad (cada 5s)
-        BAT_STATUS=$(termux-battery-status)
-        BAT_LEVEL=$(echo "$BAT_STATUS" | jq -r '.percentage // 100')
-        BAT_TEMP=$(echo "$BAT_STATUS" | jq -r '.temperature // 25')
-
-        PAYLOAD=$(jq -n \
-          --argjson level "$BAT_LEVEL" \
-          --argjson temp "$BAT_TEMP" \
-          --argjson lat "$LAT" \
-          --argjson lng "$LNG" \
-          --argjson alt "$ALT" \
-          --argjson accuracy "$ACC" \
-          '{"status": "diagnostico", "level": $level, "temp": $temp, "lat": $lat, "lng": $lng, "alt": $alt, "accuracy": $accuracy}')
-
-        publish_mqtt "$TOPIC_STATUS" "$PAYLOAD" true
-        echo "[🛰️ NET] [$(date +%T)] Telemetría enviada por MQTT."
-    else
-        # Sin cobertura: Si el directo de Chrome está corriendo, lo matamos para salvar batería
-        if [ "$VIDEO_RUNNING" -eq 1 ]; then
-            echo "[🛰️ NET] Conexión perdida. Apagando vídeo para conservar batería..."
-            stop_video_apps
-            VIDEO_RUNNING=0
-        fi
-    fi
-
-    # 3. Captura y registro de fotos en alta resolución (cada 60 segundos)
-    if [ $((CICLO % PHOTO_CYCLES)) -eq 0 ]; then
-        echo "[$(date +%T)] 📸 Capturando frame autónomo de alta resolución..."
-
-        # Si la cámara física está ocupada por el directo, pausar Chrome 2s
-        if [ "$VIDEO_RUNNING" -eq 1 ]; then
-            am force-stop com.android.chrome &>/dev/null
-            am force-stop flutter.vdo.ninja &>/dev/null
-            sleep 2
-        fi
-
-        rm -f "$TARGET_IMG"
-        termux-camera-photo -c 0 "$TARGET_IMG"
-
-        # Reanudar directo tras el disparo si debe seguir activo
-        if [ "$VIDEO_RUNNING" -eq 1 ]; then
-            am start -a android.intent.action.VIEW -d "$VDO_NINJA_URL" &>/dev/null
-        fi
-
-        if [ -f "$TARGET_IMG" ]; then
-            # Guardar copia física con timestamp en el almacenamiento local del teléfono
-            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-            LOCAL_COPY="$PHOTO_DIR/sonda_$TIMESTAMP.jpg"
-            cp "$TARGET_IMG" "$LOCAL_COPY"
-
-            TEXTO_DETECTADO="Captura autónoma - Altitud: $ALT m"
-
-            if [ "$COBERTURA" -eq 1 ]; then
-                echo "[$(date +%T)] 📤 Subiendo foto original al servidor..."
-                UPLOAD_RESP=$(curl -s --connect-timeout 10 --max-time 30 -F "file=@$TARGET_IMG" -F "texto=$TEXTO_DETECTADO" -F "device_id=$DEVICE_ID" "$IMAGE_SERVER_URL/upload")
-
-                if [ $? -eq 0 ] && [ -n "$UPLOAD_RESP" ] && [[ "$UPLOAD_RESP" != *"Error"* ]]; then
-                    FILENAME="$UPLOAD_RESP"
-                    URL_COMPLETA="$IMAGE_SERVER_URL/images/$FILENAME"
-                    echo "[✅ OK] Subida exitosa: $URL_COMPLETA"
-
-                    PAYLOAD=$(jq -n \
-                      --arg txt "$TEXTO_DETECTADO" \
-                      --arg url "$URL_COMPLETA" \
-                      --argjson lat "$LAT" \
-                      --argjson lng "$LNG" \
-                      --argjson alt "$ALT" \
-                      '{texto: $txt, url_imagen: $url, lat: $lat, lng: $lng, alt: $alt}')
-
-                    publish_mqtt "$TOPIC_CAMERA" "$PAYLOAD"
-                else
-                    echo "[❌ ERROR] Falló la subida de foto: $UPLOAD_RESP"
-                    echo "[$(date +%Y-%m-%d\ %H:%M:%S)] [OFFLINE_ERR] Lat: $LAT, Lng: $LNG, Alt: $ALT, Archivo: sonda_$TIMESTAMP.jpg" >> "$OFFLINE_LOG"
-                fi
-            else
-                echo "[🛰️ NET] Sin cobertura. Guardada localmente: sonda_$TIMESTAMP.jpg"
-                echo "[$(date +%Y-%m-%d\ %H:%M:%S)] [OFFLINE_SAVE] Lat: $LAT, Lng: $LNG, Alt: $ALT, Archivo: sonda_$TIMESTAMP.jpg" >> "$OFFLINE_LOG"
-            fi
-        fi
-    fi
 
     sleep 5
-    CICLO=$((CICLO + 1))
 done

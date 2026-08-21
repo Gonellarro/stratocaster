@@ -205,7 +205,7 @@ function stopSelfTestOnFailure() {
 
 function startRadioChecks() {
     updateChecklistUI('chk-lora', 'testing', 'Esperando trama nueva...');
-    updateChecklistUI('chk-aprs-lora', 'testing', 'Esperando posición y sensores...');
+    updateChecklistUI('chk-aprs-lora', 'testing', 'Esperando trama nueva...');
 
     loraRadioCheckTimer = setTimeout(() => completeRadioCheck('lora', false), 120000);
     aprsRadioCheckTimer = setTimeout(() => completeRadioCheck('aprs', false), 120000);
@@ -231,11 +231,11 @@ function completeRadioCheck(kind, passed) {
         clearTimeout(aprsRadioCheckTimer);
         if (passed) {
             updateChecklistUI('chk-aprs-lora', 'ok', aprsChecklistLabel());
-            logMessage('ok', 'LORA APRS', 'Posición, temperatura y presión confirmadas.');
+            logMessage('ok', 'LORA APRS', 'Trama APRS recibida: enlace confirmado.');
         } else {
             checks.aprs_lora = false;
             updateChecklistUI('chk-aprs-lora', 'ko', 'ERROR (KO)');
-            logMessage('err', 'LORA APRS', 'No se recibieron todos los datos APRS durante 2 minutos.');
+            logMessage('err', 'LORA APRS', 'No se recibió ninguna trama APRS durante 2 minutos.');
         }
     }
     finishSelfTestIfComplete();

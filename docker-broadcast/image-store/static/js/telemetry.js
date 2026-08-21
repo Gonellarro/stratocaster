@@ -125,24 +125,13 @@ function aprsValueIsPresent(value) {
     return value !== undefined && value !== null && value !== 'null' && value !== '' && Number.isFinite(Number(value));
 }
 
-function aprsDataIsFresh(now = Date.now()) {
-    return aprsLoraData.positionUpdatedAt > 0 &&
-        aprsLoraData.temperatureUpdatedAt > 0 &&
-        aprsLoraData.pressureUpdatedAt > 0 &&
-        (now - aprsLoraData.positionUpdatedAt) <= APRS_DATA_MAX_AGE_MS &&
-        (now - aprsLoraData.temperatureUpdatedAt) <= APRS_DATA_MAX_AGE_MS &&
-        (now - aprsLoraData.pressureUpdatedAt) <= APRS_DATA_MAX_AGE_MS;
-}
-
 function aprsChecklistLabel() {
-    const temp = aprsValueIsPresent(aprsLoraData.temperature) ? `${Number(aprsLoraData.temperature).toFixed(1)}°C` : '-- °C';
-    const pressure = aprsValueIsPresent(aprsLoraData.pressure) ? `${Number(aprsLoraData.pressure).toFixed(1)} hPa` : '-- hPa';
-    return `Posición · ${temp} · ${pressure}`;
+    return 'TRAMA RECIBIDA';
 }
 
-// EA2FMQ-8 publica por APRS la posición y los sensores en tramas distintas.
-// Conservamos el último valor fresco de cada grupo para que el control pueda
-// comprobar el conjunto, sin confundirlo con la telemetría de la sonda.
+// El check APRS verifica presencia: cualquier trama normalizada nueva confirma
+// que el emisor, el decodificador y el enlace MQTT están operativos. Posición
+// y sensores se siguen conservando y mostrando independientemente.
 function handleAprsLoraTelemetry(data) {
     const now = Date.now();
     aprsLoraData.lastSeen = now;
@@ -175,7 +164,7 @@ function handleAprsLoraTelemetry(data) {
     }
 
     const receivedDuringTest = aprsLoraData.lastSeen >= aprsLoraTestStartedAt;
-    if (isSequenceRunning && !aprsRadioCheckFinished && receivedDuringTest && aprsDataIsFresh(now)) {
+    if (isSequenceRunning && !aprsRadioCheckFinished && receivedDuringTest) {
         checks.aprs_lora = true;
         completeRadioCheck('aprs', true);
     }

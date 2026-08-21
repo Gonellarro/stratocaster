@@ -16,7 +16,6 @@ let testModeEnabled = false;
 let lastCoverageState = 'unknown';
 let loraTestStartedAt = 0;
 let aprsLoraTestStartedAt = 0;
-const APRS_DATA_MAX_AGE_MS = 10 * 60 * 1000;
 let aprsLoraData = {
     lat: null, lng: null, temperature: null, pressure: null,
     positionUpdatedAt: 0, temperatureUpdatedAt: 0, pressureUpdatedAt: 0,

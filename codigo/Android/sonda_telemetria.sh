@@ -19,6 +19,11 @@ MQTT_USER="${MQTT_USER:-}"
 MQTT_PASS="${MQTT_PASS:-}"
 TOPIC_TELEMETRY="sonda/mobile/$DEVICE_ID/telemetry"
 INTERVAL="${TELEMETRY_INTERVAL:-5}"
+STATE_DIR="${SONDA_STATE_DIR:-$HOME/.sonda}"
+GPS_LOG="$STATE_DIR/telemetry_gps.json"
+GPS_PID=""
+
+mkdir -p "$STATE_DIR"
 
 for cmd in mosquitto_pub jq timeout termux-location termux-battery-status termux-wake-lock termux-wake-unlock; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -43,18 +48,41 @@ publish_telemetry() {
 
 cleanup() {
     echo "[INFO] Telemetría detenida."
+    if [ -n "${GPS_PID:-}" ]; then
+        kill "$GPS_PID" >/dev/null 2>&1 || true
+    fi
     termux-wake-unlock >/dev/null 2>&1 || true
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+# Salir explícitamente: si solo ejecutamos cleanup en INT, Bash continúa el
+# while y Ctrl+C parece no funcionar.
+trap 'exit 130' INT TERM
 
 termux-wake-lock >/dev/null 2>&1 || true
+rm -f "$GPS_LOG"
+
+start_gps_listener() {
+    # El modo updates mantiene una petición GNSS abierta; -r last solo lee una
+    # caché y puede dejar de actualizarse cuando se apaga la pantalla.
+    termux-location -p gps -r updates 2>/dev/null \
+        | jq -c --unbuffered . > "$GPS_LOG" &
+    GPS_PID=$!
+}
+
+start_gps_listener
 echo "[INFO] Publicando telemetría en $TOPIC_TELEMETRY cada ${INTERVAL}s."
-echo "[INFO] No se inicia vídeo, no se capturan fotos y no se espera GPS válido."
+echo "[INFO] GPS continuo activo; no se inicia vídeo ni se capturan fotos."
 
 while true; do
-    # -r last no espera una adquisición: devuelve el último dato disponible.
-    # Si no existe un fix válido, el timeout evita bloquear el ciclo.
-    location_json=$(timeout 5s termux-location -p gps -r last 2>/dev/null || true)
+    # Reiniciar el listener si Termux:API lo cerró o perdió la petición.
+    if ! kill -0 "$GPS_PID" >/dev/null 2>&1; then
+        echo "[$(date +%T)] GPS detenido; reiniciando listener..."
+        start_gps_listener
+    fi
+
+    # Leer el último fix disponible sin esperar a que llegue uno nuevo.
+    location_json=$(tail -n 1 "$GPS_LOG" 2>/dev/null || true)
+    [[ "$location_json" == \{*\} ]] || location_json="{}"
     lat=$(echo "$location_json" | jq -r '.latitude // "null"' 2>/dev/null || echo null)
     lng=$(echo "$location_json" | jq -r '.longitude // "null"' 2>/dev/null || echo null)
     alt=$(echo "$location_json" | jq -r '.altitude // "null"' 2>/dev/null || echo null)

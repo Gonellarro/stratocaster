@@ -142,8 +142,8 @@ Una vez que el servidor terrestre y el móvil están en marcha, el operador real
 1. Con todos los checks y el vídeo confirmados, pulsa **ARMAR SONDA**.
 2. El móvil responde `armed`, reproduce el aviso de armado y queda esperando. Todavía no inicia la Fase 1.
 3. Cuando el operador confirma que todo sigue correcto, pulsa **🚀 INICIAR CUENTA ATRÁS**.
-4. El servidor inicia el segundero y, al llegar a `00:00:00`, envía la orden `launch` al móvil.
-5. El móvil confirma `launched` y activa la **Fase 1: Ignición**.
+4. El servidor inicia el segundero y, al llegar a `00:00:00`, envía la orden `launch` al móvil. El dashboard muestra **Lanzamiento pendiente** hasta tener acuse.
+5. El móvil confirma `launched`; entonces el dashboard declara **En vuelo** y activa la **Fase 1: Ignición**.
 
 ### Fase 1: Vuelo en Directo (Streaming)
 * El terminal móvil abre de forma automática Google Chrome con la emisión configurada de VDO.ninja de la cámara trasera.
@@ -165,11 +165,16 @@ Una vez que el servidor terrestre y el móvil están en marcha, el operador real
 * Si el móvil detecta que ha descendido y permanece varios minutos estable con velocidad baja, entra en estado `landed` y reproduce en ciclos `~/sonidos/alarma_recuperacion.mp3`. Esta detección es local y funciona sin cobertura.
 * Con cobertura, el operador puede solicitar la alarma de recuperación, `message_1` o detener el audio. Solo se permiten archivos preinstalados.
 
+### Recuperación y cierre de misión
+1. Durante el vuelo, pulsa **SOLICITAR RECUPERACIÓN**. El panel mostrará **RECUP. PENDIENTE** hasta que el móvil confirme la orden.
+2. Si no hay cobertura, el móvil no puede confirmar ni recibir órdenes MQTT. El operador puede pulsar **FORZAR RECUPERACIÓN**: cambia la fase de la consola, pero queda registrado explícitamente que no existe confirmación del móvil.
+3. Cuando la recuperación esté confirmada o haya sido forzada, pulsa **CERRAR MISIÓN**. Después se habilita **NUEVA MISIÓN**. El cierre no borra fotos ni telemetría ya almacenadas.
+
 ### Abortar Lanzamiento
 Si durante la cuenta atrás de 10 segundos el operador detecta anomalías en rampa, puede pulsar el botón **🚨 ABORTAR LANZAMIENTO** (situado justo debajo del temporizador).
-* La interfaz detiene el reloj y restablece el estado a la **Fase 0 (Espera)**.
-* Se envía una señal al móvil para que detenga cualquier intento de transmisión y libere la cámara.
-* El checklist se resetea para poder realizar pruebas de nuevo.
+* La interfaz muestra **ABORTO PENDIENTE** hasta que el móvil confirme la orden.
+* Solo tras el acuse del móvil se restablece la **Fase 0 (Espera)** y se resetea el checklist.
+* Si el móvil no tiene cobertura, la consola no afirma que el aborto se haya ejecutado.
 
 ---
 

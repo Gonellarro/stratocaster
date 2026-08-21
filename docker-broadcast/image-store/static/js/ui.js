@@ -59,8 +59,29 @@ function updateGeneralStatusLarge() {
     const large = document.getElementById('sys-status-large');
     if (!large) return;
 
-    // La recuperación es un estado operativo cerrado, no una alarma de
-    // comunicaciones aunque el móvil ya no tenga cobertura.
+    if (mission.state === 'recuperacion_solicitada') {
+        large.textContent = 'RECUP. PENDIENTE';
+        large.className = 'header-pill alarm';
+        return;
+    }
+    if (mission.state === 'recuperacion_forzada') {
+        large.textContent = 'RECUP. FORZADA';
+        large.className = 'header-pill waiting';
+        return;
+    }
+    if (mission.state === 'lanzamiento_solicitado') {
+        large.textContent = 'LANZ. PENDIENTE';
+        large.className = 'header-pill alarm';
+        return;
+    }
+    if (mission.state === 'aborto_solicitado') {
+        large.textContent = 'ABORTO PENDIENTE';
+        large.className = 'header-pill alarm';
+        return;
+    }
+
+    // La recuperación confirmada es un estado operativo cerrado, no una
+    // alarma de comunicaciones aunque el móvil ya no tenga cobertura.
     if (mission.state === 'recuperacion') {
         large.textContent = 'RECUPERACIÓN';
         large.className = 'header-pill waiting';

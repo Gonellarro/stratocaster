@@ -330,6 +330,21 @@ handle_command() {
     local cmd="$1"
     local command_id="${2:-}"
     local audio_id="${3:-}"
+    local expires_at="${4:-}"
+    local expires_seconds
+
+    # Los comandos de misión no se retienen en MQTT: una orden atrasada no
+    # debe ejecutarse al recuperar cobertura. Si en el futuro se cambia la
+    # entrega, esta comprobación mantiene la misma garantía de seguridad.
+    if [[ "$expires_at" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+        expires_seconds="${expires_at%%.*}"
+        if [ "$(date +%s)" -gt "$expires_seconds" ]; then
+            echo "[🤖 COMANDO] Ignorado por caducidad: $cmd"
+            publish_ack "command_expired" "$command_id"
+            return
+        fi
+    fi
+
     echo "[🤖 COMANDO] Recibido: $cmd"
     
     case "$cmd" in
@@ -561,8 +576,9 @@ rm -f "$RECOVERY_FLAG"
             CMD=$(echo "$line" | jq -r '.cmd // empty')
             COMMAND_ID=$(echo "$line" | jq -r '.command_id // empty')
             AUDIO_ID=$(echo "$line" | jq -r '.audio_id // empty')
+            EXPIRES_AT=$(echo "$line" | jq -r '.expires_at // empty')
             if [ -n "$CMD" ]; then
-                handle_command "$CMD" "$COMMAND_ID" "$AUDIO_ID" </dev/null &
+                handle_command "$CMD" "$COMMAND_ID" "$AUDIO_ID" "$EXPIRES_AT" </dev/null &
             fi
         done
         echo "[MQTT] Suscripción perdida; reintentando en 2 segundos..."

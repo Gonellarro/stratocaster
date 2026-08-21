@@ -131,7 +131,7 @@ function triggerBuzzer() {
 }
 
 function finalizeMission() {
-    logMessage('info', 'MISIÓN', 'Enviando orden de Fase 4 al móvil...');
+    logMessage('info', 'MISIÓN', 'Solicitando Fase 4 al móvil...');
     fetch('/control_lanzamiento', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -139,13 +139,43 @@ function finalizeMission() {
     }).then(async response => {
         if (!response.ok) throw new Error(await response.text());
         const data = await response.json();
-        mission.state = data.estado || 'finalizada';
-        logMessage('info', 'MISIÓN', 'Orden enviada. Esperando confirmación de recuperación del móvil.');
+        mission.state = data.estado || 'recuperacion_solicitada';
+        logMessage('warn', 'MISIÓN', 'Recuperación solicitada. Esperando confirmación del móvil.');
         validateChecklist();
     }).catch(error => {
         logMessage('err', 'MISIÓN', 'No se pudo finalizar la misión: ' + error.message);
         pollLaunchStatus();
     });
+}
+
+function forceRecovery() {
+    if (!window.confirm('El móvil no ha confirmado la recuperación. ¿Quieres declararla igualmente como decisión del operador?')) return;
+    fetch('/control_lanzamiento', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'forzar_recuperacion' })
+    }).then(async response => {
+        if (!response.ok) throw new Error(await response.text());
+        const data = await response.json();
+        mission.state = data.estado;
+        logMessage('warn', 'MISIÓN', 'Recuperación forzada por el operador; el móvil no la ha confirmado.');
+        validateChecklist();
+    }).catch(error => logMessage('err', 'MISIÓN', 'No se pudo forzar la recuperación: ' + error.message));
+}
+
+function closeMission() {
+    if (!window.confirm('¿Cerrar la misión actual? Esta acción no borra las fotos ni la telemetría almacenadas.')) return;
+    fetch('/control_lanzamiento', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cerrar_mision' })
+    }).then(async response => {
+        if (!response.ok) throw new Error(await response.text());
+        const data = await response.json();
+        mission.state = data.estado;
+        logMessage('ok', 'MISIÓN', 'Misión cerrada. Ya puedes iniciar una nueva.');
+        validateChecklist();
+    }).catch(error => logMessage('err', 'MISIÓN', 'No se pudo cerrar la misión: ' + error.message));
 }
 
 function startNewMission() {
@@ -168,6 +198,8 @@ function validateChecklist() {
     const btnPreview = document.getElementById('btn-video-preview');
     const btnVideoConfirm = document.getElementById('btn-video-confirm');
     const btnFinalize = document.getElementById('btn-finalize-mission');
+    const btnForceRecovery = document.getElementById('btn-force-recovery');
+    const btnCloseMission = document.getElementById('btn-close-mission');
     const btnNewMission = document.getElementById('btn-new-mission');
     
     if (!btnReady || !btnArm || !btnAbort) return;
@@ -179,7 +211,7 @@ function validateChecklist() {
     }
     
     // Botón Abortar siempre activo durante misiones en curso
-    if (mission.state === 'armando' || mission.state === 'armada' || mission.state === 'cuenta_atras' || mission.state === 'lanzado') {
+    if (mission.state === 'armando' || mission.state === 'armada' || mission.state === 'cuenta_atras' || mission.state === 'lanzamiento_solicitado' || mission.state === 'lanzado') {
         btnAbort.disabled = false;
     } else {
         btnAbort.disabled = true;
@@ -188,22 +220,16 @@ function validateChecklist() {
     // La previsualización y confirmación solo son posibles antes de armar.
     if (btnPreview) btnPreview.disabled = !(mission.state === 'espera' && (preflightPassed || testModeEnabled) && !videoPreviewInProgress && !videoConfirmed);
     if (btnVideoConfirm) btnVideoConfirm.disabled = !(mission.state === 'espera' && (preflightPassed || testModeEnabled) && videoPreviewReady && !videoConfirmed);
-    if (btnFinalize) btnFinalize.disabled = !(mission.state === 'lanzado' || mission.state === 'recuperacion');
+    if (btnFinalize) btnFinalize.disabled = !(['lanzamiento_solicitado', 'lanzado'].includes(mission.state));
+    if (btnForceRecovery) btnForceRecovery.disabled = mission.state !== 'recuperacion_solicitada';
+    if (btnCloseMission) btnCloseMission.disabled = !(['recuperacion', 'recuperacion_forzada'].includes(mission.state));
     if (btnNewMission) {
         btnNewMission.hidden = false;
-        btnNewMission.disabled = ['armando', 'armada', 'cuenta_atras', 'lanzado'].includes(mission.state);
+        btnNewMission.disabled = ['armando', 'armada', 'cuenta_atras', 'lanzamiento_solicitado', 'lanzado', 'recuperacion_solicitada', 'aborto_solicitado'].includes(mission.state);
     }
 
     if (mission.state === 'armada') {
         // El armado ya está confirmado: ahora se puede iniciar la cuenta atrás.
-        btnArm.disabled = true;
-        btnReady.disabled = false;
-        return;
-    }
-
-    if (mission.state === 'armando' && testModeEnabled) {
-        // En pruebas se puede probar el lanzamiento aunque el teléfono no
-        // haya enviado el acuse ARMADA.
         btnArm.disabled = true;
         btnReady.disabled = false;
         return;
@@ -354,16 +380,16 @@ function updatePhaseIndicators(estado) {
     p3.className = 'phase-card';
     p4.className = 'phase-card';
 
-    if (estado === 'espera' || estado === 'armando' || estado === 'armada') {
+    if (estado === 'espera' || estado === 'armando' || estado === 'armada' || estado === 'aborto_solicitado') {
         p1.className = 'phase-card active';
         currentPhase = 1;
     } else if (estado === 'cuenta_atras') {
         p2.className = 'phase-card active';
         currentPhase = 2;
-    } else if (estado === 'lanzado') {
+    } else if (estado === 'lanzamiento_solicitado' || estado === 'lanzado') {
         p3.className = 'phase-card active';
         currentPhase = 3;
-    } else if (estado === 'recuperacion' || estado === 'finalizada') {
+    } else if (estado === 'recuperacion_solicitada' || estado === 'recuperacion' || estado === 'recuperacion_forzada' || estado === 'finalizada') {
         p4.className = 'phase-card active';
         currentPhase = 4;
     }

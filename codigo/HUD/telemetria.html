@@ -874,7 +874,7 @@
             const timerVal = document.getElementById('timer-val');
 
             if (countdownOverlay) countdownOverlay.style.display = 'none';
-            if (state === 'lanzado') {
+            if (state === 'lanzamiento_solicitado' || state === 'lanzado') {
                 const publishedLaunchMs = Number(data.timestamp_lanzamiento) * 1000;
                 launchTime = Number.isFinite(publishedLaunchMs) && publishedLaunchMs > 0
                     ? publishedLaunchMs

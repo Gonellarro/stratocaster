@@ -142,6 +142,9 @@ DEFAULT_STATE = {
     'mobile_last_payload': {},
 }
 
+FLIGHT_STATES = ('lanzamiento_solicitado', 'lanzado')
+RECOVERY_STATES = ('recuperacion_solicitada', 'recuperacion', 'recuperacion_forzada')
+
 def mission_state_topic():
     """Topic retenido que consume el HUD de realización para cada sonda."""
     return f'sonda/mission/{DEVICE_ID}/state'
@@ -232,20 +235,47 @@ def handle_mqtt_message(message):
         return
 
     status = payload.get('status')
+    if status == 'launched':
+        if (state.get('estado') == 'lanzamiento_solicitado'
+                and payload.get('command_id') == state.get('last_command_id')):
+            state['estado'] = 'lanzado'
+            state['last_event'] = 'El móvil confirmó el lanzamiento'
+            save_launch_state(state)
+            publish_mission_state(state)
+            app.logger.info('Misión %s confirmada EN VUELO por acuse MQTT', state.get('mission_id'))
+        return
+
+    if status == 'aborted':
+        if (state.get('estado') == 'aborto_solicitado'
+                and payload.get('command_id') == state.get('last_command_id')):
+            state['estado'] = 'espera'
+            state['tiempo_restante'] = 0
+            state['timestamp_inicio'] = 0.0
+            state['timestamp_lanzamiento'] = 0.0
+            state['timestamp_mision'] = 0.0
+            state['preflight_passed'] = False
+            state['video_confirmed'] = False
+            state['last_event'] = 'El móvil confirmó el aborto; sistema en espera'
+            save_launch_state(state)
+            publish_mission_state(state)
+            app.logger.info('Misión %s abortada y confirmada por MQTT', state.get('mission_id'))
+        return
+
     if status == 'recovery_requested':
-        if (state.get('estado') in ('lanzado', 'recuperacion')
+        if (state.get('estado') in ('recuperacion_solicitada', 'recuperacion', 'recuperacion_forzada')
                 and payload.get('command_id') == state.get('last_command_id')):
             state['estado'] = 'recuperacion'
             state['tiempo_restante'] = 0
             state['last_event'] = 'El móvil confirmó la Fase 4: baliza y recuperación activas'
             save_launch_state(state)
+            publish_mission_state(state)
             app.logger.info('Misión %s entra en RECUPERACIÓN por acuse MQTT', state.get('mission_id'))
         return
 
     if status != 'landed':
         return
 
-    if state.get('estado') not in ('lanzado', 'recuperacion'):
+    if state.get('estado') not in (*FLIGHT_STATES, *RECOVERY_STATES):
         app.logger.info('Aterrizaje recibido fuera de una misión lanzada; se ignora')
         return
     if state.get('estado') == 'recuperacion':
@@ -254,6 +284,7 @@ def handle_mqtt_message(message):
     state['tiempo_restante'] = 0
     state['last_event'] = 'Aterrizaje detectado; baliza de recuperación activa'
     save_launch_state(state)
+    publish_mission_state(state)
     app.logger.info('Misión %s pasa a RECUPERACIÓN por evento MQTT landed', state.get('mission_id'))
 
 def start_mqtt_listener():
@@ -345,15 +376,18 @@ def complete_countdown_if_due(expected_start=None):
         if elapsed < COUNTDOWN_SECONDS:
             return state
 
-        state['estado'] = 'lanzado'
+        state['estado'] = 'lanzamiento_solicitado'
         state['tiempo_restante'] = 0
         state['timestamp_lanzamiento'] = time.time()
         command_id = uuid.uuid4().hex
         state['last_command_id'] = command_id
-        state['last_event'] = 'Cuenta atrás completada; orden de lanzamiento enviada'
+        state['last_event'] = 'Cuenta atrás completada; esperando confirmación de lanzamiento del móvil'
         save_launch_state(state)
         publish_mission_state(state)
-        publish_command('launch', command_id)
+        if not publish_command('launch', command_id):
+            state['last_event'] = 'No se pudo publicar la orden de lanzamiento; lanzamiento no confirmado'
+            save_launch_state(state)
+            publish_mission_state(state)
         return state
 
 def schedule_countdown_completion(started_at):
@@ -446,8 +480,7 @@ def change_launch_status():
         state['estado'] = 'armada'
         state['last_event'] = 'Móvil armado y esperando lanzamiento'
     elif action == 'ok':
-        can_countdown_in_test_mode = state.get('test_mode') and state.get('estado') == 'armando'
-        if state.get('estado') != 'armada' and not can_countdown_in_test_mode:
+        if state.get('estado') != 'armada':
             return reject('El móvil debe confirmar ARMADA antes de la cuenta atrás')
         now = time.time()
         state['estado'] = 'cuenta_atras'
@@ -455,45 +488,41 @@ def change_launch_status():
         state['timestamp_lanzamiento'] = 0.0
         state['timestamp_mision'] = now
         state['tiempo_restante'] = COUNTDOWN_SECONDS
-        state['last_event'] = (
-            'Cuenta atrás iniciada en modo pruebas sin acuse ARMADA'
-            if can_countdown_in_test_mode else 'Cuenta atrás iniciada'
-        )
-    elif action == 'recuperacion':
-        if state.get('estado') not in ('lanzado', 'recuperacion'):
-            return reject('La recuperación solo puede iniciarse tras el lanzamiento')
-        state['estado'] = 'recuperacion'
-        state['tiempo_restante'] = 0
-        state['last_event'] = 'Aterrizaje detectado; baliza de recuperación activa'
+        state['last_event'] = 'Cuenta atrás iniciada'
     elif action == 'abortar':
         command_id = uuid.uuid4().hex
-        publish_command('abort', command_id)
-        state['estado'] = 'espera'
-        state['tiempo_restante'] = 0
-        state['timestamp_inicio'] = 0.0
-        state['timestamp_lanzamiento'] = 0.0
-        state['timestamp_mision'] = 0.0
-        state['preflight_passed'] = False
-        state['video_confirmed'] = False
+        if not publish_command('abort', command_id):
+            return reject('No se pudo enviar la orden ABORTAR')
+        state['estado'] = 'aborto_solicitado'
         state['last_command_id'] = command_id
-        state['last_event'] = 'Misión abortada; sistema en espera'
+        state['last_event'] = 'Orden de aborto enviada; esperando confirmación del móvil'
     elif action == 'reset':
         state = dict(DEFAULT_STATE)
         state['mission_id'] = f"MISIÓN_{datetime.datetime.now().strftime('%Y_%m_%d_%H%M%S')}"
         state['last_event'] = 'Nueva misión creada; sistema en espera'
     elif action == 'finalizar':
-        if state.get('estado') not in ('lanzado', 'recuperacion'):
-            return reject('Solo se puede finalizar una misión lanzada o en recuperación')
+        if state.get('estado') not in FLIGHT_STATES:
+            return reject('La recuperación solo se puede solicitar durante el vuelo')
         command_id = uuid.uuid4().hex
         state['last_command_id'] = command_id
-        # La Fase 4 no se declara hasta recibir el acuse del móvil. Así la
-        # consola nunca aparenta una recuperación que no haya sido recibida.
-        state['last_event'] = 'Orden de Fase 4 enviada; esperando acuse del móvil'
+        state['estado'] = 'recuperacion_solicitada'
+        state['last_event'] = 'Recuperación solicitada; esperando confirmación del móvil'
         save_launch_state(state)
         if not publish_command('recovery', command_id):
-            state['last_event'] = 'No se pudo publicar la orden de Fase 4'
+            state['last_event'] = 'Recuperación solicitada, pero no se pudo publicar la orden al móvil'
             save_launch_state(state)
             return jsonify({'error': state['last_event'], 'state': state}), 503
+    elif action in ('recuperacion', 'forzar_recuperacion'):
+        if state.get('estado') not in ('recuperacion_solicitada', *FLIGHT_STATES):
+            return reject('Solo se puede forzar recuperación desde una solicitud pendiente o durante el vuelo')
+        state['estado'] = 'recuperacion_forzada'
+        state['tiempo_restante'] = 0
+        state['last_event'] = 'Recuperación forzada por el operador; sin confirmación del móvil'
+    elif action == 'cerrar_mision':
+        if state.get('estado') not in ('recuperacion', 'recuperacion_forzada'):
+            return reject('Solo se puede cerrar una misión en recuperación')
+        state['estado'] = 'finalizada'
+        state['last_event'] = 'Misión cerrada por el operador'
     else:
         return reject('Acción desconocida')
 

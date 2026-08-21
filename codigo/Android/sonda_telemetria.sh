@@ -64,8 +64,16 @@ rm -f "$GPS_LOG"
 start_gps_listener() {
     # El modo updates mantiene una petición GNSS abierta; -r last solo lee una
     # caché y puede dejar de actualizarse cuando se apaga la pantalla.
-    termux-location -p gps -r updates 2>/dev/null \
-        | jq -c --unbuffered . > "$GPS_LOG" &
+    # El proceso que controlamos es este supervisor, no el último proceso de
+    # la tubería. Así Termux puede cerrar/reabrir termux-location sin que el
+    # emisor principal se quede sin GPS.
+    (
+        while true; do
+            termux-location -p gps -r updates 2>/dev/null \
+                | jq -c --unbuffered . >> "$GPS_LOG" || true
+            sleep 1
+        done
+    ) &
     GPS_PID=$!
 }
 
@@ -74,14 +82,13 @@ echo "[INFO] Publicando telemetría en $TOPIC_TELEMETRY cada ${INTERVAL}s."
 echo "[INFO] GPS continuo activo; no se inicia vídeo ni se capturan fotos."
 
 while true; do
-    # Reiniciar el listener si Termux:API lo cerró o perdió la petición.
-    if ! kill -0 "$GPS_PID" >/dev/null 2>&1; then
-        echo "[$(date +%T)] GPS detenido; reiniciando listener..."
-        start_gps_listener
-    fi
-
     # Leer el último fix disponible sin esperar a que llegue uno nuevo.
     location_json=$(tail -n 1 "$GPS_LOG" 2>/dev/null || true)
+    # Si todavía no hay una línea del listener, pedir la última posición de
+    # forma acotada. No bloquea el ciclo ni exige que el GPS esté ya fijado.
+    if [ -z "$location_json" ]; then
+        location_json=$(timeout 5s termux-location -p gps -r last 2>/dev/null || true)
+    fi
     [[ "$location_json" == \{*\} ]] || location_json="{}"
     lat=$(echo "$location_json" | jq -r '.latitude // "null"' 2>/dev/null || echo null)
     lng=$(echo "$location_json" | jq -r '.longitude // "null"' 2>/dev/null || echo null)

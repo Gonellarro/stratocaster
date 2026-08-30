@@ -39,7 +39,6 @@ codigo/
   RXLora/                       Firmware del receptor LoRa con MQTT
   TXLora/                       Firmware del transmisor LoRa
 docker-TIG/                     Mosquitto, Telegraf, InfluxDB, Grafana y APRS
-legacy/                         Componentes retirados, conservados como referencia
 ```
 
 ## Despliegue del servidor

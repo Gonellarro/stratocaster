@@ -19,6 +19,7 @@ legacy/docker-broadcast/.env.staging
 legacy/docker-broadcast/images/
 legacy/android-control/sonda.env_staging
 legacy/mosquitto-certs/certs/*.key
+legacy/
 codigo/RXLora/secrets.h
 docker-TIG/mosquitto/config/password_file
 __pycache__/

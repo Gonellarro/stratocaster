@@ -178,7 +178,7 @@ def make_kml(groups: dict[tuple[str, str], list[dict[str, object]]], name: str) 
     for (source, device_id), points in sorted(groups.items()):
         style_id = f"{source}-{device_id}".replace(" ", "_")
         line_coords = "\n".join(
-            f"          {point['lng']:.7f},{point['lat']:.7f},0"
+            f"          {point['lng']:.7f},{point['lat']:.7f},{point['altitude']:.1f}"
             for point in points
         )
         start, end = points[0], points[-1]
@@ -192,14 +192,15 @@ def make_kml(groups: dict[tuple[str, str], list[dict[str, object]]], name: str) 
         <description>Fuente: {xml(source_label(source))}. Desde {xml(start['time'])} hasta {xml(end['time'])}.</description>
         <LineString>
           <tessellate>1</tessellate>
-          <altitudeMode>clampToGround</altitudeMode>
+          <extrude>1</extrude>
+          <altitudeMode>absolute</altitudeMode>
           <coordinates>
 {line_coords}
           </coordinates>
         </LineString>
       </Placemark>
-      <Placemark><name>Inicio · {xml(device_id)}</name><styleUrl>#{xml(style_id)}</styleUrl><Point><coordinates>{start['lng']:.7f},{start['lat']:.7f},{start['altitude']:.1f}</coordinates></Point></Placemark>
-      <Placemark><name>Final · {xml(device_id)}</name><styleUrl>#{xml(style_id)}</styleUrl><Point><coordinates>{end['lng']:.7f},{end['lat']:.7f},{end['altitude']:.1f}</coordinates></Point></Placemark>
+      <Placemark><name>Inicio · {xml(device_id)} · {start['altitude']:.0f} m</name><styleUrl>#{xml(style_id)}</styleUrl><Point><altitudeMode>absolute</altitudeMode><coordinates>{start['lng']:.7f},{start['lat']:.7f},{start['altitude']:.1f}</coordinates></Point></Placemark>
+      <Placemark><name>Final · {xml(device_id)} · {end['altitude']:.0f} m</name><styleUrl>#{xml(style_id)}</styleUrl><Point><altitudeMode>absolute</altitudeMode><coordinates>{end['lng']:.7f},{end['lat']:.7f},{end['altitude']:.1f}</coordinates></Point></Placemark>
     </Folder>'''
         )
     return f'''<?xml version="1.0" encoding="UTF-8"?>

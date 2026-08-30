@@ -1,0 +1,5 @@
+# Copia este archivo como mosquitto.conf y adapta solo la instalación local.
+# No guardes certificados, claves ni password_file en Git.
+listener 1883
+allow_anonymous false
+password_file /mosquitto/config/password_file

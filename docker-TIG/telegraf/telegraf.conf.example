@@ -1,6 +1,4 @@
-# ===============================================================================
-# CONFIGURACIÓN GLOBAL DEL AGENTE TELEGRAF
-# ===============================================================================
+# Copia este archivo como telegraf.conf para usarlo con Docker Compose.
 [agent]
   interval = "10s"
   round_interval = true
@@ -13,9 +11,6 @@
   hostname = "telegraf_srv"
   omit_hostname = false
 
-# ===============================================================================
-# INPUT: Consumidor MQTT Multi-Dispositivo Estandarizado (Jerarquía sonda/+/+/+)
-# ===============================================================================
 [[inputs.mqtt_consumer]]
   servers = ["tcp://mosquitto:1883"]
   topics = [
@@ -29,15 +24,11 @@
   password = "${MQTT_PASSWORD}"
   data_format = "json"
   topic_tag = "topic"
-  # Extraer la estructura del topic en Tags de InfluxDB
   [[inputs.mqtt_consumer.topic_parsing]]
     topic = "sonda/+/+/+"
     measurement = "measurement/_/_/_"
     tags = "_/subsystem/device_id/data_type"
 
-# ===============================================================================
-# OUTPUT: InfluxDB v2
-# ===============================================================================
 [[outputs.influxdb_v2]]
   urls = ["http://influxdb:8086"]
   token = "${INFLUX_TOKEN}"

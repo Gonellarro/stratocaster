@@ -44,10 +44,17 @@ docker-TIG/                     Mosquitto, Telegraf, InfluxDB, Grafana y APRS
 ## Despliegue del servidor
 
 En `docker-TIG`, crea `.env` a partir de `.env.example` y rellena las
-credenciales de InfluxDB, Grafana y MQTT. Crea también el usuario MQTT:
+credenciales de InfluxDB, Grafana y MQTT. Las configuraciones activas de
+Mosquitto y Telegraf también son locales: créalas desde sus plantillas. Así,
+un `git pull` no reemplazará tus certificados, contraseñas ni ajustes del
+servidor.
 
 ```bash
 cd docker-TIG
+cp mosquitto/config/mosquitto.conf.example mosquitto/config/mosquitto.conf
+cp telegraf/telegraf.conf.example telegraf/telegraf.conf
+cp .env.example .env
+
 docker run --rm -v "$PWD/mosquitto/config:/mosquitto/config" \
   eclipse-mosquitto:2.1.2-alpine \
   mosquitto_passwd -b /mosquitto/config/password_file admin TU_CLAVE_MQTT

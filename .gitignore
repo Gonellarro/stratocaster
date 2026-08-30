@@ -21,7 +21,10 @@ legacy/android-control/sonda.env_staging
 legacy/mosquitto-certs/certs/*.key
 legacy/
 codigo/RXLora/secrets.h
+docker-TIG/mosquitto/certs/
 docker-TIG/mosquitto/config/password_file
+docker-TIG/mosquitto/config/mosquitto.conf
+docker-TIG/telegraf/telegraf.conf
 __pycache__/
 *.pyc
 

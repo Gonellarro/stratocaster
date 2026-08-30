@@ -32,6 +32,7 @@ codigo/Android/*.tmp
 codigo/Android/*.log
 capturas/
 /tmp/
+exports/
 
 # Carpetas de editores y sistemas operativos
 .vscode/

@@ -96,6 +96,29 @@ mosquitto_sub -h stratocaster.martivich.es -p 1883 \
   -u admin -P 'TU_CLAVE_MQTT' -t 'sonda/#' -v
 ```
 
+## Exportar una ruta a Google Earth
+
+El exportador consulta InfluxDB y genera un KMZ con una traza por dispositivo.
+No requiere instalar paquetes de Python y obtiene las credenciales del archivo
+`docker-TIG/.env`.
+
+```bash
+python3 scripts/export_influx_kmz.py
+```
+
+El intervalo por defecto es el vuelo del 23 de agosto de 2026, de 11:00 a
+17:30 (hora española), y deja el resultado en `exports/`. Para otro intervalo:
+
+```bash
+python3 scripts/export_influx_kmz.py \
+  --start 2026-08-23T11:00:00+02:00 \
+  --stop 2026-08-23T17:30:00+02:00 \
+  --source all
+```
+
+Usa `--format kml` si prefieres un KML sin comprimir. Abre el archivo KMZ/KML
+resultante con Google Earth.
+
 ## Seguridad actual
 
 MQTT usa autenticación, pero el puerto 1883 no cifra el tráfico. No publiques

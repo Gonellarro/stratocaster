@@ -177,9 +177,8 @@ def make_kml(groups: dict[tuple[str, str], list[dict[str, object]]], name: str) 
     folders: list[str] = []
     for (source, device_id), points in sorted(groups.items()):
         style_id = f"{source}-{device_id}".replace(" ", "_")
-        whens = "\n".join(f"        <when>{xml(point['time'])}</when>" for point in points)
-        coords = "\n".join(
-            f"        <gx:coord>{point['lng']:.7f} {point['lat']:.7f} {point['altitude']:.1f}</gx:coord>"
+        line_coords = "\n".join(
+            f"          {point['lng']:.7f},{point['lat']:.7f},0"
             for point in points
         )
         start, end = points[0], points[-1]
@@ -191,18 +190,20 @@ def make_kml(groups: dict[tuple[str, str], list[dict[str, object]]], name: str) 
         <name>Trayectoria {xml(device_id)} ({len(points)} puntos)</name>
         <styleUrl>#{xml(style_id)}</styleUrl>
         <description>Fuente: {xml(source_label(source))}. Desde {xml(start['time'])} hasta {xml(end['time'])}.</description>
-        <gx:Track>
-          <altitudeMode>absolute</altitudeMode>
-{whens}
-{coords}
-        </gx:Track>
+        <LineString>
+          <tessellate>1</tessellate>
+          <altitudeMode>clampToGround</altitudeMode>
+          <coordinates>
+{line_coords}
+          </coordinates>
+        </LineString>
       </Placemark>
       <Placemark><name>Inicio · {xml(device_id)}</name><styleUrl>#{xml(style_id)}</styleUrl><Point><coordinates>{start['lng']:.7f},{start['lat']:.7f},{start['altitude']:.1f}</coordinates></Point></Placemark>
       <Placemark><name>Final · {xml(device_id)}</name><styleUrl>#{xml(style_id)}</styleUrl><Point><coordinates>{end['lng']:.7f},{end['lat']:.7f},{end['altitude']:.1f}</coordinates></Point></Placemark>
     </Folder>'''
         )
     return f'''<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+<kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
     <name>{xml(name)}</name>
 {chr(10).join(folders)}

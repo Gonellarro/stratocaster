@@ -60,7 +60,6 @@ def flux_timestamp(value: datetime) -> str:
 def build_flux(bucket: str, start: datetime, stop: datetime) -> str:
     return f'''from(bucket: {json.dumps(bucket)})
   |> range(start: time(v: {json.dumps(flux_timestamp(start))}), stop: time(v: {json.dumps(flux_timestamp(stop))}))
-  |> filter(fn: (r) => r["_measurement"] == "mqtt_consumer")
   |> filter(fn: (r) =>
     r["topic"] == "gps/data" or
     (r["subsystem"] == "mobile" and r["data_type"] == "telemetry") or

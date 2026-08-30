@@ -8,20 +8,17 @@ docker-TIG/mosquitto/data/
 docker-TIG/mosquitto/log/
 docker-TIG/grafana/*
 !docker-TIG/grafana/provisioning/
-docker-broadcast/images/
-images/
-docker-TIG/mosquitto/certs/*.key
-docker-TIG/mosquitto/certs/*.csr
-docker-TIG/mosquitto/certs/*.srl
 
 # Archivos con credenciales y contraseñas (Secretos)
 .env
 docker-TIG/.env
-docker-broadcast/.env
 codigo/Android/sonda.env
-codigo/Android/sonda.env_staging
-docker-broadcast/.env.staging
 docker-TIG/.env.staging
+legacy/docker-broadcast/.env
+legacy/docker-broadcast/.env.staging
+legacy/docker-broadcast/images/
+legacy/android-control/sonda.env_staging
+legacy/mosquitto-certs/certs/*.key
 codigo/RXLora/secrets.h
 docker-TIG/mosquitto/config/password_file
 __pycache__/
@@ -40,4 +37,5 @@ capturas/
 .idea/
 .obsidian/
 .DS_Store
+.figma/
 Thumbs.db

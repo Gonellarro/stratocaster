@@ -21,15 +21,10 @@ services:
     restart: unless-stopped
     ports:
       - '1883:1883'
-      - '9001:9001'
     volumes:
       - ./mosquitto/config:/mosquitto/config
       - ./mosquitto/data:/mosquitto/data
       - ./mosquitto/log:/mosquitto/log
-      - ./mosquitto/certs:/mosquitto/certs
-    networks:
-      - default
-      - telemetry_net
 
   telegraf:
     image: telegraf:${TELEGRAF_VERSION}
@@ -43,15 +38,9 @@ services:
       - MQTT_PASSWORD=${TELEGRAF_MQTT_PASSWORD}
     volumes:
       - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       - influxdb
       - mosquitto
-    networks:
-      - default
-      - telemetry_net
-    ports:
-      - '8125:8125'
 
   aprs-decoder:
     build: ./aprs-decoder
@@ -67,9 +56,6 @@ services:
       - MQTT_CLIENT_ID=aprs_decoder
     depends_on:
       - mosquitto
-    networks:
-      - default
-      - telemetry_net
 
   grafana:
     image: grafana/grafana:${GRAFANA_VERSION}
@@ -80,7 +66,6 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_USER}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
-      - GF_INSTALL_PLUGINS=marcusolsson-json-datasource,pr0ps-trackmap-panel
       - INFLUX_TOKEN=${INFLUX_TOKEN}
       - INFLUX_ORG=${INFLUX_ORG}
       - INFLUX_BUCKET=${INFLUX_BUCKET}
@@ -92,8 +77,3 @@ services:
     volumes:
       - ./grafana:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
-
-networks:
-  telemetry_net:
-    external: true
-    name: sonda_telemetry

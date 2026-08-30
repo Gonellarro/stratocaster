@@ -27,7 +27,7 @@ mkdir -p "$STATE_DIR"
 
 for cmd in mosquitto_pub jq timeout termux-location termux-battery-status termux-wake-lock termux-wake-unlock; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
-        echo "[ERROR] Falta '$cmd'. Ejecuta install_sonda.sh en Termux."
+        echo "[ERROR] Falta '$cmd'. Instala las dependencias indicadas en el README."
         exit 1
     fi
 done

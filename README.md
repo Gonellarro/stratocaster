@@ -1,94 +1,104 @@
-# 🛰️ Proyecto Stratocaster (Sonda IoT Multi-dispositivo)
+# Stratocaster · Telemetría de sonda
 
-Ecosistema completo de software y hardware para el control, adquisición de telemetría y transmisión en directo de sondas atmosféricas/meteorológicas mediante múltiples dispositivos redundantes.
+Sistema de telemetría para una sonda meteorológica. Recoge datos de un móvil
+Android y de enlaces LoRa, los almacena en InfluxDB y los muestra en Grafana.
 
-El proyecto permite rastrear la posición, altitud, velocidad y datos físicos de la sonda en tiempo real combinando transmisiones por radio LoRa (868 MHz) y enlaces de datos móviles 4G/LTE (con captura de imágenes por IA en la nube y streaming WebRTC).
+El proyecto ya no incluye consola web de control, vídeo ni captura de fotos.
+La operación actual es exclusivamente de telemetría MQTT.
 
----
+## Arquitectura activa
 
-## 🏗️ Arquitectura General
-
-```mermaid
-graph TD
-    subgraph Sonda [Atmósfera / Payload]
-        M1[Móvil Android 1 - Termux] -->|4G/LTE WSS| Mosquitto
-        M1 -->|Fotos POST| Flask[Flask Image-Store]
-        M2[Móvil Android 2 - Termux] -->|4G/LTE WSS| Mosquitto
-        M2 -->|Fotos POST| Flask
-        TX[Transmisor LoRa ESP32] -->|Radio 868MHz| RX[Receptor LoRa T-Beam]
-    end
-
-    subgraph Servidor N100 [Tierra]
-        RX -->|USB / MQTT| Mosquitto[Mosquitto MQTT Broker]
-        Flask -->|Metadatos MQTT| Mosquitto
-        Mosquitto --> Telegraf[Telegraf Agent]
-        Telegraf --> InfluxDB[(InfluxDB v2)]
-        InfluxDB --> Grafana[Grafana Dashboard]
-    end
-
-    subgraph Estación de Tierra [Controlador]
-        Browser[Consola Control Web] <-->|WSS / HTTP| Mosquitto & Flask
-        OBS[OBS Studio + HUD HTML] <-->|WSS| Mosquitto
-    end
+```text
+Móvil Android ──MQTT──┐
+                       ├── Mosquitto ── Telegraf ── InfluxDB ── Grafana
+LoRa RX ───────MQTT───┤
+LoRa APRS ── MQTT ── decodificador APRS ──────────────────────┘
 ```
 
----
+El móvil ejecuta `codigo/Android/sonda_telemetria.sh` y publica en:
 
-## 📂 Estructura del Repositorio
+```text
+sonda/mobile/<DEVICE_ID>/telemetry
+```
 
-El proyecto está organizado en las siguientes carpetas:
+Los receptores LoRa publican telemetría JSON normalizada en:
 
-* 📂 **`codigo/`**
-  * 📱 `Android/`: Scripts de Termux ([sonda_loop.sh](file:///home/marti/Documentos/Personal/Sonda/codigo/Android/sonda_loop.sh)) para control y captura autónoma en vuelo.
-  * 🛰️ `RXLora/`: Firmware del receptor de tierra LoRa ([RXLora.ino](file:///home/marti/Documentos/Personal/Sonda/codigo/RXLora/RXLora.ino)) en ESP32.
-  * 🚀 `TXLora/`: Firmware del emisor de abordo LoRa ([TXLora.ino](file:///home/marti/Documentos/Personal/Sonda/codigo/TXLora/TXLora.ino)) con módulo GPS.
-  * 📺 `HUD/`: Interfaz gráfica HUD en HTML ([telemetria.html](file:///home/marti/Documentos/Personal/Sonda/codigo/HUD/telemetria.html)) diseñada para integrarse como fuente web en OBS.
-* 📂 **`docker-TIG/`**
-  * Configuración del stack de base de datos y paneles de visualización (InfluxDB, Telegraf, Mosquitto, Grafana).
-* 📂 **`docker-broadcast/`**
-  * Servidor web Flask (`image-store`) para almacenamiento de fotos enviadas por los móviles en vuelo y la consola web de control pre-vuelo.
-* 📂 **`docs/`**
-  * Guías específicas, manuales y registro histórico del proyecto (incluye el manual de instalación de Termux, diagramas de flujo y plan de arquitectura).
+```text
+sonda/lora/<DEVICE_ID>/telemetry
+```
 
----
+El decodificador APRS convierte las tramas recibidas en
+`sonda/lora/aprs/telemetry/<INDICATIVO>` al mismo formato normalizado de LoRa.
 
-## 📋 Documentación de Referencia
+## Contenido del repositorio
 
-Para operar el sistema, consulta los siguientes manuales detallados:
+```text
+codigo/
+  Android/sonda_telemetria.sh   Emisor Android/Termux
+  Android/sonda.env.example     Plantilla de configuración privada
+  RXLora/                       Firmware del receptor LoRa con MQTT
+  TXLora/                       Firmware del transmisor LoRa
+docker-TIG/                     Mosquitto, Telegraf, InfluxDB, Grafana y APRS
+legacy/                         Componentes retirados, conservados como referencia
+```
 
-1. 📖 **Manual de Operaciones:** [manual_operaciones.md](file:///home/marti/Documentos/Personal/Sonda/manual_operaciones.md) — Procedimiento paso a paso para el despliegue del servidor, preparación de abordo, checklist pre-vuelo y fases de misión.
-2. 📱 **Instalación en Móviles (Termux):** [instalacion_termux.md](file:///home/marti/Documentos/Personal/Sonda/docs/instalacion_termux.md) — Configuración del entorno de Android, permisos de GPS/cámara y clonado de scripts.
-3. 🗺️ **Esquema Multi-dispositivo:** [plan_arquitectura_multidispositivo.md](file:///home/marti/Documentos/Personal/Sonda/plan_arquitectura_multidispositivo.md) — Especificación de los canales de MQTT jerárquicos y formato de datos.
-4. ⚙️ **Protocolo de Lanzamiento:** [flujo_lanzamiento.md](file:///home/marti/Documentos/Personal/Sonda/docs/flujo_lanzamiento.md) — Diagrama de secuencias y comandos de control pre-vuelo.
-5. 📝 **Registro de Cambios:** [devlog.md](file:///home/marti/Documentos/Personal/Sonda/devlog.md) — Historial detallado de sesiones de ingeniería.
+## Despliegue del servidor
 
----
+En `docker-TIG`, crea `.env` a partir de `.env.example` y rellena las
+credenciales de InfluxDB, Grafana y MQTT. Crea también el usuario MQTT:
 
-## ⚡ Inicio Rápido
-
-### 1. Iniciar Servidor (Tierra)
-Asegúrate de configurar los archivos `.env` (usa `.env.example` como plantilla) y levanta los contenedores Docker:
 ```bash
-# Iniciar base de datos e ingesta (TIG)
 cd docker-TIG
-docker compose up -d
+docker run --rm -v "$PWD/mosquitto/config:/mosquitto/config" \
+  eclipse-mosquitto:2.1.2-alpine \
+  mosquitto_passwd -b /mosquitto/config/password_file admin TU_CLAVE_MQTT
 
-# Iniciar servidor de imágenes y control
-cd ../docker-broadcast
-docker compose up -d
+sudo chown 1883:1883 mosquitto/config/password_file
+sudo chmod 600 mosquitto/config/password_file
+docker compose up -d --build
 ```
 
-### 2. Configurar Móviles (Abordo)
-Copia el script `sonda_loop.sh` y configura su identificador único en `sonda.env`:
-```env
-DEVICE_ID="movil_sonda_1"
-MQTT_HOST="stratocaster.martivich.es"
-MQTT_PORT=1883
-MQTT_USER="tu_usuario"
-MQTT_PASS="tu_contraseña"
+Servicios expuestos:
+
+- MQTT: puerto `1883`, con usuario y contraseña.
+- InfluxDB: puerto `8086`.
+- Grafana: puerto `3000`.
+
+El dashboard `Sonda LORA` se provisiona automáticamente desde
+`docker-TIG/grafana/provisioning/`.
+
+## Preparación del móvil Android
+
+En Termux instala Termux:API y concede permisos de ubicación. Después:
+
+```bash
+pkg install mosquitto jq coreutils termux-api
+termux-setup-storage
 ```
 
-### 3. Monitorizar el Vuelo
-* **Consola de Control:** `https://stratocaster.martivich.es/control?device_id=movil_sonda_1`
-* **HUD de OBS:** Cargar localmente o por web `telemetria.html?device_id=movil_sonda_1`
-* **Grafana (Histórico):** Acceder a `https://stratocaster.martivich.es/grafana/`
+Copia `codigo/Android/sonda.env.example` como `sonda.env` junto al script y
+rellena `MQTT_HOST`, `MQTT_USER`, `MQTT_PASS`, `DEVICE_ID` y, opcionalmente,
+`TELEMETRY_INTERVAL`.
+
+```bash
+chmod +x sonda_telemetria.sh
+./sonda_telemetria.sh
+```
+
+El emisor mantiene un receptor GNSS activo y publica latitud, longitud,
+altitud, precisión, batería y temperatura. Se detiene con `Ctrl+C`.
+
+## Verificación rápida
+
+Desde un equipo con acceso al broker:
+
+```bash
+mosquitto_sub -h stratocaster.martivich.es -p 1883 \
+  -u admin -P 'TU_CLAVE_MQTT' -t 'sonda/#' -v
+```
+
+## Seguridad actual
+
+MQTT usa autenticación, pero el puerto 1883 no cifra el tráfico. No publiques
+credenciales ni archivos `.env` en Git. Antes de un uso expuesto a Internet,
+conviene migrar a MQTT con TLS y usuarios con permisos limitados por topic.

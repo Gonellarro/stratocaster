@@ -98,9 +98,9 @@ mosquitto_sub -h stratocaster.martivich.es -p 1883 \
 
 ## Exportar una ruta a Google Earth
 
-El exportador consulta InfluxDB y genera un KMZ con una traza por dispositivo.
-No requiere instalar paquetes de Python y obtiene las credenciales del archivo
-`docker-TIG/.env`.
+El exportador consulta InfluxDB y genera un KMZ con una traza por dispositivo:
+Móvil 4G (cian), LoRa ESP32 (rojo) y LoRa APRS (verde). No requiere instalar
+paquetes de Python y obtiene las credenciales del archivo `docker-TIG/.env`.
 
 ```bash
 python3 scripts/export_influx_kmz.py
@@ -117,7 +117,8 @@ python3 scripts/export_influx_kmz.py \
 ```
 
 Usa `--format kml` si prefieres un KML sin comprimir. Abre el archivo KMZ/KML
-resultante con Google Earth.
+resultante con Google Earth. También puedes exportar solo uno de los enlaces:
+`--source mobile`, `--source lora` o `--source aprs`.
 
 ## Seguridad actual
 

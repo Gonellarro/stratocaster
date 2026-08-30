@@ -57,24 +57,19 @@ def flux_timestamp(value: datetime) -> str:
     return value.isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def source_filter(source: str) -> str:
-    if source == "mobile":
-        return 'r["subsystem"] == "mobile"'
-    if source == "lora":
-        return 'r["subsystem"] == "lora"'
-    return 'r["subsystem"] == "mobile" or r["subsystem"] == "lora"'
-
-
-def build_flux(bucket: str, start: datetime, stop: datetime, source: str) -> str:
+def build_flux(bucket: str, start: datetime, stop: datetime) -> str:
     return f'''from(bucket: {json.dumps(bucket)})
   |> range(start: time(v: {json.dumps(flux_timestamp(start))}), stop: time(v: {json.dumps(flux_timestamp(stop))}))
   |> filter(fn: (r) => r["_measurement"] == "mqtt_consumer")
-  |> filter(fn: (r) => {source_filter(source)})
-  |> filter(fn: (r) => r["data_type"] == "telemetry")
+  |> filter(fn: (r) =>
+    r["topic"] == "gps/data" or
+    (r["subsystem"] == "mobile" and r["data_type"] == "telemetry") or
+    (r["subsystem"] == "lora" and r["data_type"] == "telemetry")
+  )
   |> filter(fn: (r) => r["_field"] == "lat" or r["_field"] == "lng" or r["_field"] == "altitude" or r["_field"] == "accuracy")
-  |> pivot(rowKey: ["_time", "subsystem", "device_id"], columnKey: ["_field"], valueColumn: "_value")
+  |> pivot(rowKey: ["_time", "topic", "subsystem", "device_id"], columnKey: ["_field"], valueColumn: "_value")
   |> filter(fn: (r) => exists r.lat and exists r.lng)
-  |> keep(columns: ["_time", "subsystem", "device_id", "lat", "lng", "altitude", "accuracy"])
+  |> keep(columns: ["_time", "topic", "subsystem", "device_id", "lat", "lng", "altitude", "accuracy"])
   |> sort(columns: ["_time"])
 '''
 
@@ -118,15 +113,34 @@ def number(value: str | None, default: float = 0.0) -> float:
         return default
 
 
-def group_points(rows: list[dict[str, str]]) -> dict[tuple[str, str], list[dict[str, object]]]:
+def source_name(row: dict[str, str]) -> str:
+    """Clasifica los tres enlaces igual que el dashboard de Grafana."""
+    device_id = row.get("device_id", "")
+    topic = row.get("topic", "")
+    if topic == "sonda/lora/EA2FMQ-8/telemetry" or device_id == "EA2FMQ-8":
+        return "aprs"
+    if row.get("subsystem") == "mobile":
+        return "mobile"
+    return "lora"
+
+
+def group_points(
+    rows: list[dict[str, str]], selected_source: str
+) -> dict[tuple[str, str], list[dict[str, object]]]:
     groups: dict[tuple[str, str], list[dict[str, object]]] = defaultdict(list)
     for row in rows:
         lat = number(row.get("lat"), float("nan"))
         lng = number(row.get("lng"), float("nan"))
         if not (-90 <= lat <= 90 and -180 <= lng <= 180):
             continue
-        source = row.get("subsystem") or "desconocido"
-        device_id = row.get("device_id") or "sin_id"
+        source = source_name(row)
+        if selected_source != "all" and source != selected_source:
+            continue
+        device_id = row.get("device_id") or {
+            "mobile": "Móvil 4G",
+            "lora": "LoRa ESP32",
+            "aprs": "LoRa APRS",
+        }[source]
         groups[(source, device_id)].append(
             {
                 "time": row["_time"],
@@ -145,7 +159,19 @@ def xml(value: object) -> str:
 
 def kml_color(source: str) -> str:
     # KML usa el orden alfa-azul-verde-rojo (aabbggrr).
-    return "ffff0000" if source == "mobile" else "ff0000ff"
+    return {
+        "mobile": "ffffff00",  # Cian
+        "lora": "ff0000ff",  # Rojo
+        "aprs": "ff008000",  # Verde
+    }[source]
+
+
+def source_label(source: str) -> str:
+    return {
+        "mobile": "Móvil 4G",
+        "lora": "LoRa ESP32",
+        "aprs": "LoRa APRS",
+    }[source]
 
 
 def make_kml(groups: dict[tuple[str, str], list[dict[str, object]]], name: str) -> str:
@@ -160,12 +186,12 @@ def make_kml(groups: dict[tuple[str, str], list[dict[str, object]]], name: str) 
         start, end = points[0], points[-1]
         folders.append(
             f'''    <Folder>
-      <name>{xml(source)} · {xml(device_id)}</name>
+      <name>{xml(source_label(source))} · {xml(device_id)}</name>
       <Style id="{xml(style_id)}"><LineStyle><color>{kml_color(source)}</color><width>4</width></LineStyle></Style>
       <Placemark>
         <name>Trayectoria {xml(device_id)} ({len(points)} puntos)</name>
         <styleUrl>#{xml(style_id)}</styleUrl>
-        <description>Fuente: {xml(source)}. Desde {xml(start['time'])} hasta {xml(end['time'])}.</description>
+        <description>Fuente: {xml(source_label(source))}. Desde {xml(start['time'])} hasta {xml(end['time'])}.</description>
         <gx:Track>
           <altitudeMode>absolute</altitudeMode>
 {whens}
@@ -196,7 +222,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Exporta telemetría InfluxDB a KML/KMZ.")
     parser.add_argument("--start", default="2026-08-23T11:00:00+02:00", help="Inicio ISO 8601; sin zona equivale a Europe/Madrid.")
     parser.add_argument("--stop", default="2026-08-23T17:30:00+02:00", help="Fin ISO 8601; sin zona equivale a Europe/Madrid.")
-    parser.add_argument("--source", choices=("mobile", "lora", "all"), default="all", help="Origen de las trazas.")
+    parser.add_argument(
+        "--source",
+        choices=("mobile", "lora", "aprs", "all"),
+        default="all",
+        help="Origen de las trazas.",
+    )
     parser.add_argument("--format", choices=("kml", "kmz"), default="kmz")
     parser.add_argument("--output", type=Path, help="Archivo de salida.")
     parser.add_argument("--env-file", type=Path, default=DEFAULT_ENV_FILE, help="Archivo .env de TIG.")
@@ -214,8 +245,8 @@ def main() -> int:
     if not all((token, org, bucket)):
         parser.error("Faltan INFLUX_TOKEN, INFLUX_ORG o INFLUX_BUCKET en el entorno o en el .env indicado")
 
-    rows = query_influx(args.influx_url, org, token, build_flux(bucket, start, stop, args.source))
-    groups = group_points(rows)
+    rows = query_influx(args.influx_url, org, token, build_flux(bucket, start, stop))
+    groups = group_points(rows, args.source)
     if not groups:
         print("No se encontraron posiciones válidas en el intervalo indicado.", file=sys.stderr)
         return 2
